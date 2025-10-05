@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>Viewer - Go WebRTC SFU</title>
+</head>
+<body style="background:#111;color:#eee;text-align:center;">
+  <h2>WebRTC Viewer</h2>
+  <video id="video" autoplay playsinline style="width:80%;background:black;"></video>
+  <script>
+        const ws = new WebSocket(`ws://${location.host}/ws`);
+        const pc = new RTCPeerConnection();
+        const video = document.getElementById("video");
+
+        pc.ontrack = (event) => {
+        console.log("📥 ontrack fired:", event.streams);
+        if (event.streams && event.streams[0]) {
+            video.srcObject = event.streams[0];
+        }
+        };
+
+        pc.onicecandidate = (event) => {
+            if (event.candidate) {
+                const c = event.candidate.toJSON(); // {candidate, sdpMid, sdpMLineIndex, usernameFragment}
+                ws.send(JSON.stringify({ type: "candidate", ...c }));
+            }
+        };
+
+        ws.onopen = () => {
+            console.log("🔗 WebSocket connected (viewer)");
+            ws.send(JSON.stringify({ type: "viewer" })); // 参加リクエスト
+        };
+
+        ws.onmessage = async (e) => {
+            const msg = JSON.parse(e.data);
+            console.log("📨 WS message:", msg);
+
+            if (msg.type === "offer") {
+                console.log("📥 received offer from server");
+                await pc.setRemoteDescription({ type: "offer", sdp: msg.sdp });
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);   // ← ここで ufrag/pwd が埋まる
+                ws.send(JSON.stringify({ type: "answer", sdp: pc.localDescription.sdp })); // ★これ
+            } else if (msg.type === "candidate") {
+                await pc.addIceCandidate({
+                    candidate: msg.candidate,
+                    sdpMid: msg.sdpMid ?? null,
+                    sdpMLineIndex: msg.sdpMLineIndex ?? null,
+                    usernameFragment: msg.usernameFragment ?? undefined,
+                });
+            }
+        }
+    </script>
+</body>
+</html>
