@@ -4,6 +4,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v4"
 	live_video_hub "streaming-server.com/application/ports/realtime/hubs"
+	live_video_dto "streaming-server.com/application/usecases/live_video/dto"
 	"streaming-server.com/infrastructure/logger"
 )
 
@@ -20,8 +21,8 @@ func NewCreateViewerPeerConnection(roomRepo live_video_hub.Interface) *CreateVie
 }
 
 func (u *CreateViewerPeerConnectionUsecase) Do(
+	params *live_video_dto.Params,
 	conn *websocket.Conn,
-	param *CreateViewerPeerConnectionInput,
 ) error {
 	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
@@ -32,7 +33,7 @@ func (u *CreateViewerPeerConnectionUsecase) Do(
 		log.Error("pc:", err)
 		return err
 	}
-	u.roomRepository.AddPeerConnection(param.RoomID, param.UserID, pc)
+	u.roomRepository.AddPeerConnection(params.RoomID, params.UserID, pc)
 
 	// 受信専用の transceiver を先に用意（あとから track が来ても受けられる）
 	_, _ = pc.AddTransceiverFromKind(
@@ -62,7 +63,7 @@ func (u *CreateViewerPeerConnectionUsecase) Do(
 		}
 		log.Info("👌 Send: Candidate to Viewer")
 	})
-	u.roomRepository.AddPublisherTracks(param.RoomID, param.UserID, pc)
+	u.roomRepository.AddPublisherTracks(params.RoomID, params.UserID, pc)
 
 	offer, err := pc.CreateOffer(nil)
 	if err != nil {
@@ -87,7 +88,7 @@ func (u *CreateViewerPeerConnectionUsecase) Do(
 			RoomID int    `json:"roomId"`
 			SDP    string `json:"sdp"`
 		}{
-			RoomID: param.RoomID,
+			RoomID: params.RoomID,
 			SDP:    offer.SDP,
 		},
 	}

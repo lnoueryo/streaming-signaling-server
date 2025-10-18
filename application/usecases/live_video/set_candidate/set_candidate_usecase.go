@@ -4,6 +4,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v4"
 	live_video_hub "streaming-server.com/application/ports/realtime/hubs"
+	live_video_dto "streaming-server.com/application/usecases/live_video/dto"
 	"streaming-server.com/infrastructure/logger"
 )
 
@@ -20,20 +21,21 @@ func NewSetCandidate(roomRepo live_video_hub.Interface) *SetCandidateUsecase {
 }
 
 func (u *SetCandidateUsecase) Do(
+	params *live_video_dto.Params,
+	message *Message,
 	conn *websocket.Conn,
-	params *SetCandidateInput,
 ) error {
 	cand := webrtc.ICECandidateInit{
-		Candidate:     params.Candidate,
-		SDPMid:        params.SDPMid,
-		SDPMLineIndex: params.SDPMLineIndex,
+		Candidate:     message.Candidate,
+		SDPMid:        message.SDPMid,
+		SDPMLineIndex: message.SDPMLineIndex,
 	}
 
 	err := u.roomRepository.AddICECandidate(params.RoomID, params.UserID, cand);if err != nil {
 		log.Error("%v", err)
 	}
 	// TODO どこかで共通化
-	message := struct {
+	msg := struct {
 		Type string      `json:"type"`
 		Data interface{} `json:"data"`
 	}{
@@ -47,7 +49,7 @@ func (u *SetCandidateUsecase) Do(
 		},
 	}
 
-	if err := conn.WriteJSON(message); err != nil {
+	if err := conn.WriteJSON(msg); err != nil {
 		log.Error("WriteJSON error:", err)
 		return err
 	}

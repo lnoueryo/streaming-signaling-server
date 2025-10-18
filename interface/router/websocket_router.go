@@ -1,17 +1,21 @@
 package router
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/gorilla/websocket"
 )
 
-type WSMsgHandler func(conn *websocket.Conn, raw interface{})
+type WSMsgHandler func(ctx context.Context, raw interface{}, conn *websocket.Conn)
 
 type WSRoute struct {
 	handlers map[string]WSMsgHandler
+	Params   map[string]string
+	BeforeConnect func(w http.ResponseWriter, req *http.Request)
 }
 
 type compiledPath struct {
@@ -32,84 +36,114 @@ var wsUpgrader = websocket.Upgrader{
 }
 
 func (r *Router) WS(path string, setup func(ws *WSRoute)) {
-	wsr := &WSRoute{handlers: make(map[string]WSMsgHandler)}
+	wsr := &WSRoute{
+		handlers: make(map[string]WSMsgHandler),
+	}
 	setup(wsr)
 
-	// Upgrade + メッセージディスパッチ
 	handler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		var ctx context.Context
+		if wsr.BeforeConnect != nil {
+			wsr.BeforeConnect(w, req)
+		} else {
+			ctx = req.Context()
+		}
+		// --- 1️⃣ パスパラメータ抽出 ---
+		pathParams := extractPathParams(path, req.URL.Path) // 例: {roomId: "1"}
+
+		// --- 2️⃣ クエリパラメータ結合 ---
+		params := map[string]string{}
+		for k, v := range pathParams {
+			params[k] = v
+		}
+		for k, v := range req.URL.Query() {
+			if len(v) > 0 {
+				params[k] = v[0]
+			}
+		}
+
+		// --- 3️⃣ Contextに格納 ---
+		ctx = context.WithValue(req.Context(), "params", params)
+
+		// --- 4️⃣ WebSocketアップグレード ---
 		conn, err := wsUpgrader.Upgrade(w, req, nil)
 		if err != nil {
-			log.Error("websocket upgrade error: %v", err)
+			log.Error("❌ WebSocket upgrade failed: %v", err)
 			http.Error(w, "websocket upgrade failed", http.StatusBadRequest)
 			return
 		}
-		defer conn.Close()
-        wsr.attachCloseHandler(conn)
 
+		defer func() {
+			log.Info("🔌 Connection closed for %+v", params)
+			conn.Close()
+		}()
+
+		// --- 5️⃣ メッセージループ ---
 		for {
 			_, data, err := conn.ReadMessage()
 			if err != nil {
-				// close/err
+				log.Warn("🔌 WS read error: %v", err)
 				break
 			}
+
 			var env struct {
-				Type string			`json:"type"`
-				Data interface{}	`json:"data"`
+				Type string      `json:"type"`
+				Data interface{} `json:"data"`
 			}
-			if err := json.Unmarshal(data, &env); err != nil || env.Type == "" {
-				log.Error("ws: invalid message (no type)")
+			if err := json.Unmarshal(data, &env); err != nil {
+				log.Warn("⚠️ Invalid WS message: %v", err)
 				continue
 			}
-			log.Info("📥 Request: ws%v %v", path, env.Type)
+
 			h, ok := wsr.handlers[env.Type]
 			if !ok {
-				log.Error("ws: no handler for type=%s", env.Type)
+				log.Warn("⚠️ No handler for message type: %s", env.Type)
 				continue
 			}
-			// ハンドラには message 全体を渡す（Data を使いたければ各自でパース）
-			h(conn, env.Data)
+
+			// 🔹 handler呼び出し（ctx＋conn＋data）
+			h(ctx, env.Data, conn)
 		}
 	})
 
-	r.addRoute(http.MethodGet, path, handler) // WS ハンドシェイクは GET
+	r.addRoute(http.MethodGet, path, handler)
 }
 
 func (r *Router) addRoute(method, path string, h http.Handler) {
-	full := joinPath(r.prefix, path)
-	r.routes = append(r.routes, Route{Path: full, Method: method, Handler: h})
-}
+    log.Info("[router.go] Registered route: %s", path)
 
-// helpers
-func joinPath(a, b string) string {
-	if a == "" || a == "/" {
-		if b == "" {
-			return "/"
-		}
-		if strings.HasPrefix(b, "/") {
-			return b
-		}
-		return "/" + b
-	}
-	if b == "" || b == "/" {
-		return a
-	}
-	return strings.TrimRight(a, "/") + "/" + strings.TrimLeft(b, "/")
-}
+    // 動的パスを正規表現化
+    regexPath := "^" + regexp.QuoteMeta(path) + "$"
+    regexPath = strings.ReplaceAll(regexPath, `\{[a-zA-Z0-9_]+\}`, "([a-zA-Z0-9_-]+)")
+    compiled := regexp.MustCompile(regexPath)
 
-func (wsr *WSRoute) attachCloseHandler(conn *websocket.Conn) {
-    conn.SetCloseHandler(func(code int, text string) error {
-        payload, _ := json.Marshal(struct {
-            Code int    `json:"code"`
-            Text string `json:"text"`
-        }{
-            Code: code,
-            Text: text,
-        })
-		h, ok := wsr.handlers["close"]
-		if ok {
-			h(conn, payload)
-		}
-		log.Info("close websocket connection code: %v", code)
-        return nil
+    r.routes = append(r.routes, Route{
+        Method:  method,
+        Path:    path,
+        Regex:   compiled,
+        Handler: h,
     })
+}
+
+func extractPathParams(routePattern, actualPath string) map[string]string {
+    params := make(map[string]string)
+
+    routeSeg := strings.Split(strings.Trim(routePattern, "/"), "/")
+    pathSeg := strings.Split(strings.Trim(actualPath, "/"), "/")
+
+    // 🧠 もし実際の方が長い場合、末尾合わせにする
+    if len(pathSeg) > len(routeSeg) {
+        diff := len(pathSeg) - len(routeSeg)
+        pathSeg = pathSeg[diff:]
+    }
+
+    for i, seg := range routeSeg {
+        if strings.HasPrefix(seg, "{") && strings.HasSuffix(seg, "}") {
+            key := seg[1 : len(seg)-1]
+            if i < len(pathSeg) {
+                params[key] = pathSeg[i]
+            }
+        }
+    }
+    return params
 }

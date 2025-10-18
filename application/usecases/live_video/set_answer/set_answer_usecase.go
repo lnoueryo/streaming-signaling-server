@@ -3,6 +3,7 @@ package set_answer_usecase
 import (
 	"github.com/gorilla/websocket"
 	live_video_hub "streaming-server.com/application/ports/realtime/hubs"
+	live_video_dto "streaming-server.com/application/usecases/live_video/dto"
 	"streaming-server.com/infrastructure/logger"
 )
 
@@ -19,14 +20,15 @@ func NewSetAnswer(roomRepo live_video_hub.Interface) *SetAnswerUsecase {
 }
 
 func (u *SetAnswerUsecase) Do(
+	params *live_video_dto.Params,
+	message *Message,
 	conn *websocket.Conn,
-	param *SetAnswerInput,
 ) error {
-	err := u.roomRepository.SetRemoteDescription(param.RoomID, param.UserID, param.SDP);if err != nil {
+	err := u.roomRepository.SetRemoteDescription(params.RoomID, params.UserID, message.SDP);if err != nil {
 		log.Error("%v", err)
 	}
 	// TODO どこかで共通化
-	message := struct {
+	msg := struct {
 		Type string `json:"type"`
 		Data struct {
 			RoomID      int    `json:"roomId"`
@@ -38,12 +40,12 @@ func (u *SetAnswerUsecase) Do(
 			RoomID      int    `json:"roomId"`
 			PublisherID string `json:"publisherId"`
 		}{
-			RoomID:      param.RoomID,
+			RoomID:      params.RoomID,
 			PublisherID: "publisherID",
 		},
 	}
 
-	if err := conn.WriteJSON(message); err != nil {
+	if err := conn.WriteJSON(msg); err != nil {
 		log.Error("WriteJSON error:", err)
 		return err
 	}

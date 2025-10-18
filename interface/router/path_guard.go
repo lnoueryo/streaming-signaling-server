@@ -1,45 +1,58 @@
 package router
 
 import (
+	"context"
 	"net/http"
-	"strings"
+	"regexp"
 )
 
 type PathGuard struct {
-	next          http.Handler
+	http.Handler
 	exacts        map[string]struct{}
 	prefixes      []string
 	redirectSlash bool
 }
 
-func (s *PathGuard) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	path := req.URL.Path
+func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+    path := req.URL.Path
 
-	if path != "/" && strings.HasSuffix(path, "/") {
-		canon := strings.TrimSuffix(path, "/")
-		if _, ok := s.exacts[canon]; ok {
-			if s.redirectSlash {
-				http.Redirect(w, req, canon, http.StatusMovedPermanently)
-				return
-			}
-			req.URL.Path = canon
-			path = canon
-		}
-	}
+    for _, route := range r.routes {
+        if route.Method != req.Method {
+            continue
+        }
 
-	if _, ok := s.exacts[path]; ok {
-		s.next.ServeHTTP(w, req)
-		return
-	}
-	for _, p := range s.prefixes {
-		if strings.HasPrefix(path, p) {
-			s.next.ServeHTTP(w, req)
-			return
-		}
-	}
-	http.NotFound(w, req)
+        if matches := route.Regex.FindStringSubmatch(path); matches != nil {
+            // パラメータを抽出
+            paramNames := extractParamNames(route.Path)
+            params := map[string]string{}
+            for i, name := range paramNames {
+                if i+1 < len(matches) {
+                    params[name] = matches[i+1]
+                }
+            }
+
+            // コンテキストに埋め込む
+            ctx := context.WithValue(req.Context(), "params", params)
+            req = req.WithContext(ctx)
+
+            route.Handler.ServeHTTP(w, req)
+            return
+        }
+    }
+
+    http.NotFound(w, req)
 }
 
 func NewPathGuard(next http.Handler, exacts map[string]struct{}, prefixes []string, redirectSlash bool) http.Handler {
-	return &PathGuard{next: next, exacts: exacts, prefixes: prefixes, redirectSlash: redirectSlash}
+	return &PathGuard{next, exacts, prefixes, redirectSlash}
+}
+
+func extractParamNames(pattern string) []string {
+    re := regexp.MustCompile(`\{([a-zA-Z0-9_]+)\}`)
+    matches := re.FindAllStringSubmatch(pattern, -1)
+    names := []string{}
+    for _, m := range matches {
+        names = append(names, m[1])
+    }
+    return names
 }

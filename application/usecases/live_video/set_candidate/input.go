@@ -1,8 +1,6 @@
 package set_candidate_usecase
 
-type SetCandidateInput struct {
-	RoomID 			int
-	UserID			int
+type Message struct {
 	Candidate     string
 	SDPMid        *string
 	SDPMLineIndex *uint16

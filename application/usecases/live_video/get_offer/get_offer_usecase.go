@@ -5,6 +5,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v4"
 	live_video_hub "streaming-server.com/application/ports/realtime/hubs"
+	live_video_dto "streaming-server.com/application/usecases/live_video/dto"
 	"streaming-server.com/infrastructure/logger"
 )
 
@@ -21,8 +22,9 @@ func NewGetOffer(roomRepo live_video_hub.Interface,) *GetOfferUsecase {
 }
 
 func (u *GetOfferUsecase) Do(
+	params *live_video_dto.Params,
+	message *Message,
 	conn *websocket.Conn,
-	params *GetOfferInput,
 ) error {
 	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
@@ -125,7 +127,7 @@ func (u *GetOfferUsecase) Do(
 		}
 	})
 	u.roomRepository.AddPeerConnection(params.RoomID, params.UserID, pc)
-	offer := webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: params.SDP}
+	offer := webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: message.SDP}
 	if err := pc.SetRemoteDescription(offer); err != nil {
 		log.Error("setRemote:", err)
 		return err
@@ -154,7 +156,7 @@ func (u *GetOfferUsecase) Do(
 	// _ = pc.SetLocalDescription(answer)
 	// <-g
 
-	message := struct {
+	msg := struct {
 		Type string `json:"type"`
 		Data struct {
 			RoomID int    `json:"roomId"`
@@ -174,7 +176,7 @@ func (u *GetOfferUsecase) Do(
 		},
 	}
 
-	if err := conn.WriteJSON(message); err != nil {
+	if err := conn.WriteJSON(msg); err != nil {
 		log.Info("WriteJSON error:", err)
 		return err
 	}

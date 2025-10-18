@@ -1,84 +1,48 @@
 package live_video_request
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
-	"strconv"
-
+	live_video_dto "streaming-server.com/application/usecases/live_video/dto"
 	get_offer_usecase "streaming-server.com/application/usecases/live_video/get_offer"
 )
 
-type getOfferRaw struct {
-	RoomID interface{} `json:"roomId"`
-	UserID interface{} `json:"userId"`
+type GetOfferRawMessage struct {
 	SDP string `json:"sdp"`
 }
 
-func GetOfferRequest(message interface{}) (*get_offer_usecase.GetOfferInput, error) {
-	var req getOfferRaw
-	var param get_offer_usecase.GetOfferInput
-    raw, err := json.Marshal(message)
+func GetOfferRequest(ctx context.Context, msg interface{}) (*live_video_dto.Params, *get_offer_usecase.Message, error) {
+	var rawMessage GetOfferRawMessage
+	var params *live_video_dto.Params
+	var rawParams = &RawParams{}
+	var message *get_offer_usecase.Message
+    raw, err := json.Marshal(rawMessage)
     if err != nil {
-        return &param, err
+        return params, message, err
     }
 
-	if err := json.Unmarshal(raw, &req); err != nil {
-		return &param, err
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		return params, message, err
 	}
-
-	return req.createParam()
+	params, _ = rawParams.parse(ctx)
+	message, _ = rawMessage.parse()
+	return params, message, nil
 }
 
-func (raw *getOfferRaw) createParam() (*get_offer_usecase.GetOfferInput, error) {
-	var input get_offer_usecase.GetOfferInput
-	roomID, err := raw.getRoomId();if err != nil {
-		return &input, err
+func (raw *GetOfferRawMessage) parse() (*get_offer_usecase.Message, error) {
+	var message get_offer_usecase.Message
+	sdp, err := raw.getSdp();if err != nil {
+		return &message, err
 	}
-	userID, err := raw.getUserId();if err != nil {
-		return &input, err
-	}
-	input.RoomID = roomID
-	input.UserID = userID
-	input.SDP = raw.SDP
-	return &input, nil
+	message.SDP = sdp
+	return &message, nil
 }
 
-func (raw *getOfferRaw) getRoomId() (int, error) {
-	var id int
-	switch v := raw.RoomID.(type) {
-	case float64:
-		id = int(v)
-	case string:
-		id, err := strconv.Atoi(v)
-		if err != nil {
-			return id, errors.New("invalid roomId format")
-		}
-	default:
-		return id, errors.New("roomId must be a number or numeric string")
+func (raw *GetOfferRawMessage) getSdp() (string, error) {
+	var sdp string = raw.SDP
+	if raw.SDP == "" {
+		return sdp, errors.New("sdp required")
 	}
-
-	if id <= 0 {
-		return id, errors.New("invalid roomId value")
-	}
-	return id, nil
-}
-
-func (raw *getOfferRaw) getUserId() (int, error) {
-	var id int
-	switch v := raw.UserID.(type) {
-	case float64:
-		id = int(v)
-	case string:
-		id, err := strconv.Atoi(v)
-		if err != nil {
-			return id, errors.New("invalid userId format")
-		}
-	default:
-		return id, errors.New("userId must be a number or numeric string")
-	}
-
-	if id <= 0 {
-		return id, errors.New("invalid userId value")
-	}
-	return id, nil
+	return sdp, nil
 }

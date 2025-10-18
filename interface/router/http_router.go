@@ -2,7 +2,9 @@ package router
 
 import (
 	"net/http"
+	"regexp"
 	"strings"
+
 	"streaming-server.com/infrastructure/logger"
 )
 
@@ -13,6 +15,7 @@ type Adapter func(http.Handler) http.Handler
 type Route struct {
 	Path        string
 	Method      string            // "", "GET", "POST", ...
+	Regex       *regexp.Regexp
 	Handler     http.Handler
 	Middlewares []Adapter         // そのルート専用のミドルウェア（Groupで付与）
 }

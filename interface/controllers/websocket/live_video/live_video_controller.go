@@ -1,17 +1,19 @@
 package live_video_controller
 
 import (
-	"log"
-
+	"context"
 	"github.com/gorilla/websocket"
 	create_viewer_peer_connection_usecase "streaming-server.com/application/usecases/live_video/create_viewer_peer_connection"
 	get_offer_usecase "streaming-server.com/application/usecases/live_video/get_offer"
 	join_room_usecase "streaming-server.com/application/usecases/live_video/join_room"
 	set_answer_usecase "streaming-server.com/application/usecases/live_video/set_answer"
 	set_candidate_usecase "streaming-server.com/application/usecases/live_video/set_candidate"
+	"streaming-server.com/infrastructure/logger"
 	live_video_request "streaming-server.com/interface/controllers/websocket/live_video/request"
 )
 
+
+var log = logger.Log
 type Controller struct {
 	GetOfferUsecase        *get_offer_usecase.GetOfferUsecase
 	JoinRoomUsecase        *join_room_usecase.JoinRoomUsecase
@@ -36,50 +38,51 @@ func NewLiveVideoController(
 	}
 }
 
-func (c *Controller) JoinRoom(conn *websocket.Conn, msg interface{}) {
-	request, err := live_video_request.JoinRoomRequest(msg)
+func (c *Controller) JoinRoom(ctx context.Context, msg interface{}, conn *websocket.Conn) {
+	params, err := live_video_request.JoinRoomRequest(ctx)
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 		return
 	}
-	c.JoinRoomUsecase.Do(conn, request)
+	c.JoinRoomUsecase.Do(params, conn)
 }
 
-func (c *Controller) CreateViewPeerConnection(conn *websocket.Conn, msg interface{}) {
-	request, err := live_video_request.CreateViewerPeerConnectionRequest(msg)
+func (c *Controller) CreateViewPeerConnection(ctx context.Context, msg interface{},  conn *websocket.Conn) {
+	params, err := live_video_request.CreateViewerPeerConnectionRequest(ctx)
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 		return
 	}
-	c.CreateViewerPeerConnectionUsecase.Do(conn, request)
+	c.CreateViewerPeerConnectionUsecase.Do(params, conn,)
 }
 
-func (c *Controller) SetAnswer(conn *websocket.Conn, msg interface{}) {
-	request, err := live_video_request.SetAnswerRequest(msg)
+func (c *Controller) SetAnswer(ctx context.Context, msg interface{},  conn *websocket.Conn) {
+	params, message, err := live_video_request.SetAnswerRequest(ctx, msg)
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 		return
 	}
-	c.SetAnswerUsecase.Do(conn, request)
+	c.SetAnswerUsecase.Do(params, message, conn)
 }
 
-func (c *Controller) SetCandidate(conn *websocket.Conn, msg interface{}) {
-	request, err := live_video_request.SetCandidateRequest(msg)
+func (c *Controller) SetCandidate(ctx context.Context, msg interface{},  conn *websocket.Conn) {
+	params, message, err := live_video_request.SetCandidateRequest(ctx, msg)
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 		return
 	}
-	c.SetCandidateUsecase.Do(conn, request)
+	c.SetCandidateUsecase.Do(params, message, conn)
 }
 
 func (c *Controller) GetOffer(
-	conn *websocket.Conn,
+	ctx context.Context,
 	msg interface{},
+	conn *websocket.Conn,
 ) {
-	request, err := live_video_request.GetOfferRequest(msg)
+	params, message, err := live_video_request.GetOfferRequest(ctx, msg)
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 		return
 	}
-	c.GetOfferUsecase.Do(conn, request)
+	c.GetOfferUsecase.Do(params, message, conn)
 }

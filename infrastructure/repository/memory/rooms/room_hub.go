@@ -6,6 +6,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v4"
+	"streaming-server.com/infrastructure/logger"
 )
 
 type RtcClient struct {
@@ -61,12 +62,14 @@ func (r *Room) RemoveTracks(userID int) error {
         }
 
         for _, sender := range viewer.PeerConn.GetSenders() {
-            senderTrack := sender.Track()
-
-            if senderTrack == track.Video || senderTrack == track.Audio {
-                _ = sender.ReplaceTrack(nil)
-                _ = viewer.PeerConn.RemoveTrack(sender)
-            }
+			senderTrack := sender.Track()
+			if senderTrack == nil {
+				continue
+			}
+			if senderTrack == track.Video || senderTrack == track.Audio {
+				_ = sender.ReplaceTrack(nil)
+				_ = viewer.PeerConn.RemoveTrack(sender)
+			}
         }
     }
     r.removeTrack(userID)
@@ -85,8 +88,14 @@ func (r *Room) addClient(userID int, conn *websocket.Conn) {
 	r.clients[userID] = client
 }
 
-func (r *Room) removeClient(userID int) {
+func (r *Room) removeClient(userID int) error {
+	client, err := r.getClient(userID);if err != nil {
+		return err
+	}
+	client.Conn.Close()
+	client.PeerConn.Close()
 	delete(r.clients, userID)
+	return nil
 }
 
 func (r *Room) removeTrack(userID int) {
@@ -94,6 +103,7 @@ func (r *Room) removeTrack(userID int) {
 	track.Video = nil
 	track.Audio = nil
 	delete(r.tracks, userID)
+	logger.Log.Debug("delete track")
 }
 
 func (r *Room) GetTrack(userID int) (*Tracks, error) {

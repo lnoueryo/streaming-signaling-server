@@ -3,6 +3,7 @@ package join_room_usecase
 import (
 	"github.com/gorilla/websocket"
 	live_video_hub "streaming-server.com/application/ports/realtime/hubs"
+	live_video_dto "streaming-server.com/application/usecases/live_video/dto"
 	"streaming-server.com/infrastructure/logger"
 )
 
@@ -21,18 +22,18 @@ func NewJoinRoom(
 }
 
 func (u *JoinRoomUsecase) Do(
+	params *live_video_dto.Params,
 	conn *websocket.Conn,
-	param *JoinRoomInput,
 ) error {
 	// room の認証が必要な場合ここ
-	u.roomRepository.Join(param.RoomID, param.UserID, conn)
+	u.roomRepository.Join(params.RoomID, params.UserID, conn)
 	conn.SetCloseHandler(func(code int, text string) error {
 		log.Info("Request: Close Connection")
-		u.roomRepository.RemoveClient(param.RoomID, param.UserID)
+		u.roomRepository.RemoveClient(params.RoomID, params.UserID)
 		return nil
 	})
 	// TODO どこかで共通化
-	message := struct {
+	msg := struct {
 		Type string `json:"type"`
 		Data struct {
 			RoomID      int    `json:"roomId"`
@@ -44,12 +45,12 @@ func (u *JoinRoomUsecase) Do(
 			RoomID      int    `json:"roomId"`
 			PublisherID string `json:"publisherId"`
 		}{
-			RoomID:      param.RoomID,
+			RoomID:      params.RoomID,
 			PublisherID: "publisherID",
 		},
 	}
 
-	if err := conn.WriteJSON(message); err != nil {
+	if err := conn.WriteJSON(msg); err != nil {
 		log.Error("WriteJSON error: ", err)
 		return err
 	}

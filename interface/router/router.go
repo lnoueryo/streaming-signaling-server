@@ -1,6 +1,7 @@
 package router
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	"streaming-server.com/interface/controllers"
+	http_controllers "streaming-server.com/interface/controllers/http"
 	middleware "streaming-server.com/interface/middlewares"
 )
 
@@ -59,7 +61,8 @@ func (r *Router) registerHttpRoutes(ctrls *controllers.Controllers) {
 
 
     r.GroupWithPrefix("/ws", []Adapter{middleware.AuthMiddleware}, func(g *Router) {
-        g.WS("/live", func(ws *WSRoute) {
+        g.WS("/live/{roomId}/{userId}", func(ws *WSRoute) {
+            ws.BeforeConnect = ctrls.WebsocketController.CreateLiveVideo
             ws.On("join", ctrls.LiveVideoController.JoinRoom)
             ws.On("offer", ctrls.LiveVideoController.GetOffer)
             ws.On("candidate", ctrls.LiveVideoController.SetCandidate)
@@ -108,6 +111,23 @@ func (r *Router) setRoutes() http.Handler {
     for path, cp := range paths {
         // メソッドディスパッチャ
         dispatcher := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+            // --- 1️⃣ パスパラメータ抽出 ---
+            pathParams := extractPathParams(path, req.URL.Path) // 例: {roomId: "1"}
+
+            // --- 2️⃣ クエリパラメータ結合 ---
+            params := map[string]string{}
+            for k, v := range pathParams {
+                params[k] = v
+            }
+            for k, v := range req.URL.Query() {
+                if len(v) > 0 {
+                    params[k] = v[0]
+                }
+            }
+            ctx := context.WithValue(req.Context(), "params", pathParams)
+            req = req.WithContext(ctx)
+            ctx = context.WithValue(req.Context(), "request", http_controllers.NewRequest(req))
+            req = req.WithContext(ctx)
             // 明示メソッド優先
             if h, ok := cp.methods[req.Method]; ok {
                 h.ServeHTTP(w, req)
@@ -154,7 +174,7 @@ func (r *Router) setRoutes() http.Handler {
         for i := len(r.globalAdapters) - 1; i >= 0; i-- {
             h = r.globalAdapters[i](h)
         }
-
+        log.Info(path)
         r.mux.Handle(path, h)
 
         // Strict 404 用

@@ -1,87 +1,91 @@
 package live_video_request
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strconv"
 
+	live_video_dto "streaming-server.com/application/usecases/live_video/dto"
 	set_candidate_usecase "streaming-server.com/application/usecases/live_video/set_candidate"
 )
 
-type setCandidateRaw struct {
-	RoomID interface{} `json:"roomId"`
-	UserID interface{} `json:"userId"`
+type SetCandidateRawMessage struct {
 	Candidate     string  `json:"candidate"`
-	SDPMid        *string `json:"sdpMid"`
-	SDPMLineIndex *uint16 `json:"sdpMLineIndex"`
+	SDPMid        string `json:"sdpMid"`
+	SDPMLineIndex interface{} `json:"sdpMLineIndex"`
 }
 
-func SetCandidateRequest(message interface{}) (*set_candidate_usecase.SetCandidateInput, error) {
-	var req setCandidateRaw
-	var param set_candidate_usecase.SetCandidateInput
-    raw, err := json.Marshal(message)
+func SetCandidateRequest(ctx context.Context, msg interface{}) (*live_video_dto.Params, *set_candidate_usecase.Message, error) {
+	var rawMessage SetCandidateRawMessage
+	var params *live_video_dto.Params
+	var rawParams = &RawParams{}
+	var message *set_candidate_usecase.Message
+    raw, err := json.Marshal(rawMessage)
     if err != nil {
-        return &param, err
+        return params, message, err
     }
 
-	if err := json.Unmarshal(raw, &req); err != nil {
-		return &param, err
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		return params, message, err
 	}
-	return req.createParam()
+	params, _ = rawParams.parse(ctx)
+	message, _ = rawMessage.parse()
+	return params, message, nil
 }
 
-func (raw *setCandidateRaw) createParam() (*set_candidate_usecase.SetCandidateInput, error) {
-	var input set_candidate_usecase.SetCandidateInput
-	roomID, err := raw.getRoomId();if err != nil {
-		return &input, err
+func (raw *SetCandidateRawMessage) parse() (*set_candidate_usecase.Message, error) {
+	var message set_candidate_usecase.Message
+	candidate, err := raw.getCandidate();if err != nil {
+		return &message, err
 	}
-	userID, err := raw.getUserId();if err != nil {
-		return &input, err
+	sdpMid, err := raw.getSdpMid();if err != nil {
+		return &message, err
 	}
-	input.RoomID = roomID
-	input.UserID = userID
-	input.Candidate = raw.Candidate
-	input.SDPMid = raw.SDPMid
-	input.SDPMLineIndex = raw.SDPMLineIndex
-	return &input, nil
+	sdpMLineIndex, err := raw.getSdpMLineIndex();if err != nil {
+		return &message, err
+	}
+	message.Candidate = candidate
+	message.SDPMid = &sdpMid
+	message.SDPMLineIndex = &sdpMLineIndex
+	return &message, nil
 }
 
-func (raw *setCandidateRaw) getRoomId() (int, error) {
-	var id int
-	switch v := raw.RoomID.(type) {
+func (raw *SetCandidateRawMessage) getCandidate() (string, error) {
+	var candidate string = raw.Candidate
+	if candidate == "" {
+		return candidate, errors.New("candidate required")
+	}
+	return candidate, nil
+}
+
+func (raw *SetCandidateRawMessage) getSdpMid() (string, error) {
+	var sdpMid string = raw.SDPMid
+	if sdpMid == "" {
+		return sdpMid, errors.New("sdp required")
+	}
+	return sdpMid, nil
+}
+
+func (raw *SetCandidateRawMessage) getSdpMLineIndex() (uint16, error) {
+	var sdpMLineIndex uint16
+
+	switch v := raw.SDPMLineIndex.(type) {
 	case float64:
-		id = int(v)
+		sdpMLineIndex = uint16(v)
+	case int:
+		sdpMLineIndex = uint16(v)
 	case string:
-		id, err := strconv.Atoi(v)
+		i, err := strconv.Atoi(v)
 		if err != nil {
-			return id, errors.New("invalid roomId format")
+			return 0, errors.New("invalid sdpMLineIndex format")
 		}
+		sdpMLineIndex = uint16(i)
+	case nil:
+		return 0, errors.New("sdpMLineIndex is missing")
 	default:
-		return id, errors.New("roomId must be a number or numeric string")
+		return 0, errors.New("sdpMLineIndex must be a number or numeric string")
 	}
 
-	if id <= 0 {
-		return id, errors.New("invalid roomId value")
-	}
-	return id, nil
-}
-
-func (raw *setCandidateRaw) getUserId() (int, error) {
-	var id int
-	switch v := raw.UserID.(type) {
-	case float64:
-		id = int(v)
-	case string:
-		id, err := strconv.Atoi(v)
-		if err != nil {
-			return id, errors.New("invalid userId format")
-		}
-	default:
-		return id, errors.New("userId must be a number or numeric string")
-	}
-
-	if id <= 0 {
-		return id, errors.New("invalid userId value")
-	}
-	return id, nil
+	return sdpMLineIndex, nil
 }

@@ -16,7 +16,7 @@
       const pendingCandidates = [];
 
       const connectWebsocket = () => {
-        ws = new WebSocket(`ws://${location.host}/ws/live`);
+        ws = new WebSocket(`ws://${location.host}/ws/live/1/1`);
         pc = new RTCPeerConnection();
 
         const video = document.getElementById("video");
@@ -45,6 +45,14 @@
           console.log("🔗 WebSocket connected (viewer)");
           ws.send(JSON.stringify({ type: "join", data: { roomId: 1, userId: 1 } }));
         };
+
+        ws.onerror = (e) => {
+          console.error("❌ WebSocket connection failed:", e)
+        }
+        ws.onclose = (e) => {
+          console.log("🔌 closed:", e.code, e.reason)
+          pc?.close()
+        }
 
         // 💬 メッセージ受信
         ws.onmessage = async (e) => {
