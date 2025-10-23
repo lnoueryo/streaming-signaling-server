@@ -1,134 +1,96 @@
-  <!DOCTYPE html>
-  <html lang="ja">
+<!DOCTYPE html>
+<html>
+  <!--
+    SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+    SPDX-License-Identifier: MIT
+  -->
+
   <head>
-    <meta charset="UTF-8" />
-    <title>Viewer - Go WebRTC SFU</title>
+    <meta charset="utf-8">
   </head>
-  <body style="background:#111;color:#eee;text-align:center;">
-    <h2>WebRTC Viewer</h2>
-    <video id="video" autoplay playsinline style="width:80%;background:black;"></video>
-    <button onclick="connectWebsocket()">connect</button>
-    <button onclick="closeWebsocket()">close</button>
+  <body>
+    <h3> Remote Video </h3>
+    <div id="remoteVideos"></div> <br />
 
-    <script>
-      let ws;
-      let pc;
-      const pendingCandidates = [];
+    <h3> Logs </h3>
+    <div id="logs"></div>
 
-      const connectWebsocket = () => {
-        ws = new WebSocket(`ws://${location.host}/ws/live/1/1`);
-        pc = new RTCPeerConnection();
 
-        const video = document.getElementById("video");
-
-        // 🎥 ストリーム受信
-        pc.ontrack = (event) => {
-          console.log("📥 ontrack fired:", event.streams);
-          if (event.streams && event.streams[0]) {
-            video.srcObject = event.streams[0];
-          }
-        };
-
-        // 🌍 ICE candidate 送信
-        pc.onicecandidate = (event) => {
-          if (event.candidate) {
-            const c = event.candidate.toJSON();
-            ws.send(JSON.stringify({
-              type: "candidate",
-              data: { roomId: 1, userId: 1, ...c },
-            }));
-          }
-        };
-
-        // 🔗 接続開始
-        ws.onopen = () => {
-          console.log("🔗 WebSocket connected (viewer)");
-          ws.send(JSON.stringify({ type: "join", data: { roomId: 1, userId: 1 } }));
-        };
-
-        ws.onerror = (e) => {
-          console.error("❌ WebSocket connection failed:", e)
-        }
-        ws.onclose = (e) => {
-          console.log("🔌 closed:", e.code, e.reason)
-          pc?.close()
-        }
-
-        // 💬 メッセージ受信
-        ws.onmessage = async (e) => {
-          const msg = JSON.parse(e.data);
-          console.log("📨 WS message:", msg.type, "data:", msg.data);
-
-          // --- 1️⃣ join 応答 ---
-          if (msg.type === "join") {
-            ws.send(JSON.stringify({ type: "viewer", data: { roomId: 1, userId: 1 } }));
-            console.log("send viewer");
-          }
-
-          // --- 2️⃣ offer 受信（サーバー→クライアント）---
-          else if (msg.type === "offer") {
-            console.log("📥 received offer from server");
-
-            await pc.setRemoteDescription({ type: "offer", sdp: msg.data.sdp });
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-
-            ws.send(JSON.stringify({
-              type: "answer",
-              data: { sdp: answer.sdp, roomId: 1, userId: 1 },
-            }));
-
-            // offer適用後に保留中candidateを適用
-            for (const c of pendingCandidates) {
-              try {
-                await pc.addIceCandidate(c);
-                console.log("✅ added queued candidate");
-              } catch (err) {
-                console.warn("⚠️ Failed to add queued ICE candidate:", err);
-              }
-            }
-            pendingCandidates.length = 0; // clear
-          }
-
-          // --- 3️⃣ candidate 受信 ---
-          else if (msg.type === "candidate") {
-            const c = msg.data;
-            if (!c) return;
-  
-            // null値チェック
-            if (c.sdpMid == null && c.sdpMLineIndex == null) {
-              console.log("⚠️ skip end-of-candidates", c);
-              return;
-            }
-  
-            // RTCIceCandidateインスタンス生成
-            const candidate = new RTCIceCandidate({
-              candidate: c.candidate,
-              sdpMid: c.sdpMid,
-              sdpMLineIndex: c.sdpMLineIndex,
-              usernameFragment: c.usernameFragment ?? undefined,
-            });
-            // remoteDescription未設定ならキューに保存
-            if (!pc.remoteDescription) {
-              console.log("💤 candidate queued (no remoteDescription yet)");
-              pendingCandidates.push(candidate);
-            } else {
-              try {
-                await pc.addIceCandidate(candidate);
-                console.log("✅ added ICE candidate:", candidate.candidate);
-              } catch (err) {
-                console.error("❌ Failed to add ICE candidate:", err);
-              }
-            }
-          }
-        };
-      };
-
-      const closeWebsocket = () => {
-        ws?.close();
-      };
-
-      connectWebsocket();
-    </script>
   </body>
-  </html>
+
+  <script>
+    let pc = new RTCPeerConnection()
+    pc.ontrack = function (event) {
+      if (event.track.kind === 'audio') {
+        return
+      }
+      const stream = event.streams[0] || new MediaStream([event.track]);
+      let el = document.createElement(event.track.kind)
+      el.srcObject = stream
+      el.autoplay = true
+      el.controls = true
+      document.getElementById('remoteVideos').appendChild(el)
+
+      event.track.onmute = function(event) {
+        el.play()
+      }
+
+      stream.onremovetrack = ({track}) => {
+        if (el.parentNode) {
+          el.parentNode.removeChild(el)
+        }
+      }
+    }
+
+    let ws = new WebSocket(`ws://localhost:8080/ws/live/1/${Math.floor(Math.random() * (10000 + 1))}`)
+    pc.onicecandidate = e => {
+      if (!e.candidate) {
+        return
+      }
+
+      ws.send(JSON.stringify({type: 'candidate', data: e.candidate}))
+    }
+
+    ws.onclose = function(evt) {
+      // window.alert("Websocket has closed")
+    }
+
+    ws.onmessage = function(evt) {
+      let msg = JSON.parse(evt.data)
+      if (!msg) {
+        return console.log('failed to parse msg')
+      }
+      console.log(msg)
+      switch (msg.type) {
+        case 'offer':
+          let offer = msg.data
+          if (!offer) {
+            return console.log('failed to parse answer')
+          }
+          pc.setRemoteDescription(offer)
+          pc.createAnswer().then(answer => {
+            pc.setLocalDescription(answer)
+            ws.send(JSON.stringify({type: 'answer', data: { sdp: answer.sdp }}))
+            console.log('send answer')
+          })
+          return
+
+        case 'candidate':
+          let candidate = msg.data
+          if (!candidate) {
+            return console.log('failed to parse candidate')
+          }
+
+          pc.addIceCandidate(candidate)
+      }
+    }
+
+    ws.onerror = function(evt) {
+      console.log("ERROR: " + evt.data)
+    }
+    ws.onopen = () => {
+      console.log('ok')
+      ws.send(JSON.stringify({type: 'viewer'}))
+    }
+  </script>
+</html>

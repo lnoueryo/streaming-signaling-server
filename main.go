@@ -5,7 +5,6 @@ import (
 	create_live_video_usecase "streaming-server.com/application/usecases/live_video/create_live_video"
 	create_viewer_peer_connection_usecase "streaming-server.com/application/usecases/live_video/create_viewer_peer_connection"
 	get_offer_usecase "streaming-server.com/application/usecases/live_video/get_offer"
-	join_room_usecase "streaming-server.com/application/usecases/live_video/join_room"
 	set_answer_usecase "streaming-server.com/application/usecases/live_video/set_answer"
 	set_candidate_usecase "streaming-server.com/application/usecases/live_video/set_candidate"
 	"streaming-server.com/infrastructure/logger"
@@ -21,7 +20,6 @@ import (
 func main() {
 	roomRepository := rooms_hub.New()
 	createLiveVideoUseccase := create_live_video_usecase.NewCreateLiveVideo()
-	joinRoomUsecase := join_room_usecase.NewJoinRoom(roomRepository)
 	getOfferUsecase := get_offer_usecase.NewGetOffer(roomRepository)
 	createViewerPeerConnectionUsecase := create_viewer_peer_connection_usecase.NewCreateViewerPeerConnection(roomRepository)
 	setAnswerUsecase := set_answer_usecase.NewSetAnswer(roomRepository)
@@ -29,7 +27,6 @@ func main() {
 	closeConnectionUsecase := close_connection_usecase.NewCloseConnection(roomRepository)
 	liveVideoController := live_video_controller.NewLiveVideoController(
 		getOfferUsecase,
-		joinRoomUsecase,
 		createViewerPeerConnectionUsecase,
 		setAnswerUsecase,
 		setCandidateUsecase,

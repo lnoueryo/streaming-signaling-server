@@ -1,7 +1,6 @@
 package create_viewer_peer_connection_usecase
 
 import (
-	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v4"
 	live_video_hub "streaming-server.com/application/ports/realtime/hubs"
 	live_video_dto "streaming-server.com/application/usecases/live_video/dto"
@@ -22,84 +21,31 @@ func NewCreateViewerPeerConnection(roomRepo live_video_hub.Interface) *CreateVie
 
 func (u *CreateViewerPeerConnectionUsecase) Do(
 	params *live_video_dto.Params,
-	conn *websocket.Conn,
+	conn *live_video_hub.ThreadSafeWriter,
 ) error {
-	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{
-			{URLs: []string{"stun:stun.l.google.com:19302"}},
-		},
-	})
+	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
-		log.Error("pc:", err)
+		log.Error("Failed to creates a PeerConnection: %v", err)
+
 		return err
 	}
-	u.roomRepository.AddPeerConnection(params.RoomID, params.UserID, pc)
 
-	// 受信専用の transceiver を先に用意（あとから track が来ても受けられる）
-	_, _ = pc.AddTransceiverFromKind(
-		webrtc.RTPCodecTypeVideo,
-		webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionRecvonly},
-	)
-	_, _ = pc.AddTransceiverFromKind(
-		webrtc.RTPCodecTypeAudio,
-		webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionRecvonly},
-	)
+	// Accept one audio and one video track incoming
+	for _, typ := range []webrtc.RTPCodecType{webrtc.RTPCodecTypeVideo, webrtc.RTPCodecTypeAudio} {
+		if _, err := peerConnection.AddTransceiverFromKind(typ, webrtc.RTPTransceiverInit{
+			Direction: webrtc.RTPTransceiverDirectionRecvonly,
+		}); err != nil {
+			log.Error("Failed to add transceiver: %v", err)
 
-	pc.OnICECandidate(func(c *webrtc.ICECandidate) {
-		log.Info("📥 Request: OnICECandidate")
-		if c == nil {
-			log.Info("ICE gathering complete")
-			return
+			return err
 		}
-		message := struct {
-			Type string                   `json:"type"`
-			Data webrtc.ICECandidateInit `json:"data"`
-		}{
-			Type: "candidate",
-			Data: c.ToJSON(),
-		}
-		if err := conn.WriteJSON(message); err != nil {
-			log.Error("send candidate error:", err)
-		}
-		log.Info("👌 Send: Candidate to Viewer")
-	})
-	u.roomRepository.AddPublisherTracks(params.RoomID, params.UserID, pc)
+	}
 
-	offer, err := pc.CreateOffer(nil)
-	if err != nil {
-		log.Error("createOffer viewer:", err)
-		return err
-	}
-	g := webrtc.GatheringCompletePromise(pc)
-	if err := pc.SetLocalDescription(offer); err != nil {
-		log.Error("setLocal viewer:", err)
-		return err
-	}
-	<-g
-	message := struct {
-		Type string `json:"type"`
-		Data struct {
-			RoomID int    `json:"roomId"`
-			SDP    string `json:"sdp"`
-		} `json:"data"`
-	}{
-		Type: "offer",
-		Data: struct {
-			RoomID int    `json:"roomId"`
-			SDP    string `json:"sdp"`
-		}{
-			RoomID: params.RoomID,
-			SDP:    offer.SDP,
-		},
-	}
-	if err := conn.WriteJSON(message); err != nil {
-		log.Error("send offer to viewer:", err)
-	}
-	log.Info("👌 Send: Offer To Viewer")
+	// Add our new PeerConnection to global list
+	u.roomRepository.AddPeerConnection(params.UserID, peerConnection, conn)
+	u.roomRepository.SetViewerEvent(peerConnection, conn)
+
+	// Signal for the new PeerConnection
+	u.roomRepository.SignalPeerConnections()
 	return nil
 }
-
-//　Androidリセット→送信→ブラウザリロード
-//　現状表示される
-// websocketのメッセージをドメインに記述
-//　ログを注入

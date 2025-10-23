@@ -1,7 +1,6 @@
 package set_candidate_usecase
 
 import (
-	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v4"
 	live_video_hub "streaming-server.com/application/ports/realtime/hubs"
 	live_video_dto "streaming-server.com/application/usecases/live_video/dto"
@@ -23,7 +22,7 @@ func NewSetCandidate(roomRepo live_video_hub.Interface) *SetCandidateUsecase {
 func (u *SetCandidateUsecase) Do(
 	params *live_video_dto.Params,
 	message *Message,
-	conn *websocket.Conn,
+	conn *live_video_hub.ThreadSafeWriter,
 ) error {
 	cand := webrtc.ICECandidateInit{
 		Candidate:     message.Candidate,

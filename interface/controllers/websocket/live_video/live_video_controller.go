@@ -2,11 +2,11 @@ package live_video_controller
 
 import (
 	"context"
-	"github.com/gorilla/websocket"
+
+	live_video_hub "streaming-server.com/application/ports/realtime/hubs"
 	close_connection_usecase "streaming-server.com/application/usecases/live_video/close_connection"
 	create_viewer_peer_connection_usecase "streaming-server.com/application/usecases/live_video/create_viewer_peer_connection"
 	get_offer_usecase "streaming-server.com/application/usecases/live_video/get_offer"
-	join_room_usecase "streaming-server.com/application/usecases/live_video/join_room"
 	set_answer_usecase "streaming-server.com/application/usecases/live_video/set_answer"
 	set_candidate_usecase "streaming-server.com/application/usecases/live_video/set_candidate"
 	"streaming-server.com/infrastructure/logger"
@@ -17,7 +17,6 @@ import (
 var log = logger.Log
 type Controller struct {
 	GetOfferUsecase        *get_offer_usecase.GetOfferUsecase
-	JoinRoomUsecase        *join_room_usecase.JoinRoomUsecase
 	CreateViewerPeerConnectionUsecase *create_viewer_peer_connection_usecase.CreateViewerPeerConnectionUsecase
 	SetAnswerUsecase *set_answer_usecase.SetAnswerUsecase
 	SetCandidateUsecase *set_candidate_usecase.SetCandidateUsecase
@@ -26,7 +25,6 @@ type Controller struct {
 
 func NewLiveVideoController(
 	GetOfferUsecase *get_offer_usecase.GetOfferUsecase,
-	joinRoomUsecase *join_room_usecase.JoinRoomUsecase,
 	createViewerPeerConnectionUsecase *create_viewer_peer_connection_usecase.CreateViewerPeerConnectionUsecase,
 	setAnswerUsecase *set_answer_usecase.SetAnswerUsecase,
 	setCandidateUsecase *set_candidate_usecase.SetCandidateUsecase,
@@ -34,7 +32,6 @@ func NewLiveVideoController(
 ) *Controller {
 	return &Controller{
 		GetOfferUsecase,
-		joinRoomUsecase,
 		createViewerPeerConnectionUsecase,
 		setAnswerUsecase,
 		setCandidateUsecase,
@@ -42,16 +39,7 @@ func NewLiveVideoController(
 	}
 }
 
-func (c *Controller) JoinRoom(ctx context.Context, msg interface{}, conn *websocket.Conn) {
-	params, err := live_video_request.JoinRoomRequest(ctx)
-	if err != nil {
-		log.Error(err)
-		return
-	}
-	c.JoinRoomUsecase.Do(params, conn)
-}
-
-func (c *Controller) CreateViewPeerConnection(ctx context.Context, msg interface{},  conn *websocket.Conn) {
+func (c *Controller) CreateViewPeerConnection(ctx context.Context, msg interface{},  conn *live_video_hub.ThreadSafeWriter) {
 	params, err := live_video_request.CreateViewerPeerConnectionRequest(ctx)
 	if err != nil {
 		log.Error(err)
@@ -60,7 +48,7 @@ func (c *Controller) CreateViewPeerConnection(ctx context.Context, msg interface
 	c.CreateViewerPeerConnectionUsecase.Do(params, conn,)
 }
 
-func (c *Controller) SetAnswer(ctx context.Context, msg interface{},  conn *websocket.Conn) {
+func (c *Controller) SetAnswer(ctx context.Context, msg interface{},  conn *live_video_hub.ThreadSafeWriter) {
 	params, message, err := live_video_request.SetAnswerRequest(ctx, msg)
 	if err != nil {
 		log.Error(err)
@@ -69,7 +57,7 @@ func (c *Controller) SetAnswer(ctx context.Context, msg interface{},  conn *webs
 	c.SetAnswerUsecase.Do(params, message, conn)
 }
 
-func (c *Controller) SetCandidate(ctx context.Context, msg interface{},  conn *websocket.Conn) {
+func (c *Controller) SetCandidate(ctx context.Context, msg interface{},  conn *live_video_hub.ThreadSafeWriter) {
 	params, message, err := live_video_request.SetCandidateRequest(ctx, msg)
 	if err != nil {
 		log.Error(err)
@@ -81,7 +69,7 @@ func (c *Controller) SetCandidate(ctx context.Context, msg interface{},  conn *w
 func (c *Controller) GetOffer(
 	ctx context.Context,
 	msg interface{},
-	conn *websocket.Conn,
+	conn *live_video_hub.ThreadSafeWriter,
 ) {
 	params, message, err := live_video_request.GetOfferRequest(ctx, msg)
 	if err != nil {
@@ -93,7 +81,7 @@ func (c *Controller) GetOffer(
 
 func (c *Controller) CloseConnection(
 	ctx context.Context,
-	conn *websocket.Conn,
+	conn *live_video_hub.ThreadSafeWriter,
 ) {
 	params, err := live_video_request.CloseConnectionRequest(ctx)
 	if err != nil {

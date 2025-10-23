@@ -6,17 +6,19 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/gorilla/websocket"
+	live_video_hub "streaming-server.com/application/ports/realtime/hubs"
 )
 
-type WSMsgHandler func(ctx context.Context, raw interface{}, conn *websocket.Conn)
+type WSMsgHandler func(ctx context.Context, raw interface{}, c *live_video_hub.ThreadSafeWriter)
 
 type WSRoute struct {
 	handlers map[string]WSMsgHandler
 	Params   map[string]string
 	BeforeConnect func(w http.ResponseWriter, req *http.Request)
-	OnDisconnect  func(ctx context.Context, conn *websocket.Conn)
+	OnDisconnect  func(ctx context.Context, c *live_video_hub.ThreadSafeWriter)
 }
 
 type compiledPath struct {
@@ -73,18 +75,22 @@ func (r *Router) WS(path string, setup func(ws *WSRoute)) {
 			http.Error(w, "websocket upgrade failed", http.StatusBadRequest)
 			return
 		}
+		c := &live_video_hub.ThreadSafeWriter{
+			conn,
+			sync.Mutex{},
+		}
 
 		defer func() {
 			log.Info("🔌 Connection closed for %+v", params)
 			if wsr.OnDisconnect != nil {
-				wsr.OnDisconnect(ctx, conn)
+				wsr.OnDisconnect(ctx, c)
 			}
-			conn.Close()
+			c.Close()
 		}()
 
 		// --- 5️⃣ メッセージループ ---
 		for {
-			_, data, err := conn.ReadMessage()
+			_, data, err := c.ReadMessage()
 			if err != nil {
 				log.Warn("🔌 WS read error: %v", err)
 				break
@@ -106,7 +112,7 @@ func (r *Router) WS(path string, setup func(ws *WSRoute)) {
 			}
 
 			// 🔹 handler呼び出し（ctx＋conn＋data）
-			h(ctx, env.Data, conn)
+			h(ctx, env.Data, c)
 		}
 	})
 

@@ -1,7 +1,6 @@
 package set_answer_usecase
 
 import (
-	"github.com/gorilla/websocket"
 	live_video_hub "streaming-server.com/application/ports/realtime/hubs"
 	live_video_dto "streaming-server.com/application/usecases/live_video/dto"
 	"streaming-server.com/infrastructure/logger"
@@ -22,7 +21,7 @@ func NewSetAnswer(roomRepo live_video_hub.Interface) *SetAnswerUsecase {
 func (u *SetAnswerUsecase) Do(
 	params *live_video_dto.Params,
 	message *Message,
-	conn *websocket.Conn,
+	conn *live_video_hub.ThreadSafeWriter,
 ) error {
 	err := u.roomRepository.SetRemoteDescription(params.RoomID, params.UserID, message.SDP);if err != nil {
 		log.Error("%v", err)

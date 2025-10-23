@@ -1,196 +1,108 @@
 <!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8" />
-  <title>WebRTC Broadcaster (JS → Go SFU)</title>
-  <style>
-    body { background:#111;color:#eee;font-family:system-ui, sans-serif; padding:16px; }
-    label { display:block; margin:8px 0 4px; }
-    input { width:280px; padding:6px; }
-    button { padding:8px 14px; margin-top:12px; }
-    video { width: 480px; background:black; margin-top:16px; }
-    pre { background:#222; padding:10px; max-height:180px; overflow:auto; }
-    .row { display:flex; gap:24px; align-items:flex-start; flex-wrap:wrap; }
-  </style>
-</head>
-<body>
-  <h2>📡 Broadcaster (Browser as Publisher)</h2>
+<html>
+  <!--
+    SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+    SPDX-License-Identifier: MIT
+  -->
 
-  <div class="row">
-    <div>
-      <label>WS URL</label>
-      <input id="wsUrl" value="ws://localhost:8080/ws" />
-      <label>Room ID</label>
-      <input id="roomId" type="number" value="1" />
-      <label>User ID（任意・重複禁止推奨）</label>
-      <input id="userId" value="2" />
-      <div style="margin-top:10px;">
-        <button id="startBtn">Start Broadcast</button>
-        <button id="stopBtn" disabled>Stop</button>
-      </div>
-      <details style="margin-top:10px;">
-        <summary>ログ</summary>
-        <pre id="log"></pre>
-      </details>
-    </div>
+  <head>
+    <meta charset="utf-8">
+  </head>
+  <body>
+    <h3> Local Video </h3>
+    <video id="localVideo" width="160" height="120" autoplay muted></video> <br />
 
-    <div>
-      <div>Local Preview</div>
-      <video id="local" playsinline autoplay muted></video>
-    </div>
-  </div>
+    <h3> Remote Video </h3>
+    <div id="remoteVideos"></div> <br />
 
-<script>
-(function(){
-  const $ = (id) => document.getElementById(id);
-  const log = (m) => { const el = $("log"); el.textContent += m + "\n"; el.scrollTop = el.scrollHeight; console.log(m); };
+    <h3> Logs </h3>
+    <div id="logs"></div>
 
-  let ws = null;
-  let pc = null;
-  let localStream = null;
 
-  $("startBtn").addEventListener("click", start);
-  $("stopBtn").addEventListener("click", stop);
+  </body>
 
-  async function start(){
-    const WS_URL = $("wsUrl").value.trim();
-    const roomId = parseInt($("roomId").value, 10);
-    const userId = parseInt($("userId").value.trim(), 10) || undefined;
-
-    // 1) WebSocket 接続
-    ws = new WebSocket(WS_URL);
-    ws.onopen = () => {
-      log("WS: connected");
-      // 1-1) join（最初のメッセージで roomId/role/userId を送る）
-      console.log(roomId)
-      console.log(userId)
-      ws.send(JSON.stringify({ type: "join", roomId, userId }));
-    };
-    ws.onclose = (e) => log(`WS: closed code=${e.code} reason=${e.reason || "(none)"}`);
-    ws.onerror = (e) => log(`WS: error ${e.message || e}`);
-
-    ws.onmessage = async (ev) => {
-        const msg = safeParse(ev.data);
-        console.log(msg)
-      if(!msg) return;
-
-      if (msg.type === "answer" && msg.sdp) {
-        // 4) サーバーの Answer を適用
-        await pc.setRemoteDescription({ type:"answer", sdp: String(msg.sdp) });
-        log("RTC: setRemoteDescription(answer) OK");
-      } else if (msg.type === "candidate" && pc) {
-        // 5) サーバー経由で届いた ICE candidate を登録
-        const c = {
-          candidate: msg.candidate,
-          sdpMid: msg.sdpMid ?? null,
-          sdpMLineIndex: (typeof msg.sdpMLineIndex === "number") ? msg.sdpMLineIndex : null,
-          usernameFragment: msg.usernameFragment ?? undefined,
-        };
-        try {
-          await pc.addIceCandidate(c);
-          log("RTC: addIceCandidate OK");
-        } catch (err) {
-          log("RTC: addIceCandidate ERR " + err);
+  <script>
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+    .then(stream => {
+      let pc = new RTCPeerConnection()
+      pc.ontrack = function (event) {
+        if (event.track.kind === 'audio') {
+          return
         }
-      } else {
-        // それ以外の通知（必要なら処理）
-        log("WS msg: " + ev.data);
+        const stream = event.streams[0] || new MediaStream([event.track]);
+        let el = document.createElement(event.track.kind)
+        el.srcObject = stream
+        el.autoplay = true
+        el.controls = true
+        document.getElementById('remoteVideos').appendChild(el)
+
+        event.track.onmute = function(event) {
+          el.play()
+        }
+
+        stream.onremovetrack = ({track}) => {
+          if (el.parentNode) {
+            el.parentNode.removeChild(el)
+          }
+        }
       }
-    };
 
-    // 2) メディア取得
-    try {
-      localStream = await navigator.mediaDevices.getUserMedia({
-        video: { width: {ideal:1280}, height: {ideal:720}, frameRate: {ideal:30} },
-        audio: true
-      });
-      $("local").srcObject = localStream;
-      log("Media: got local stream");
-    } catch (e) {
-      log("Media error: " + e.message);
-      cleanup();
-      return;
-    }
+      document.getElementById('localVideo').srcObject = stream
+      stream.getTracks().forEach(track => pc.addTrack(track, stream))
 
-    // 3) RTCPeerConnection 構築
-    pc = new RTCPeerConnection({
-      // STUN はあなたのサーバと合わせて
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-    });
+      let ws = new WebSocket(`ws://localhost:8080/ws/live/1/${Math.floor(Math.random() * (10000 + 1))}`)
+      pc.onicecandidate = e => {
+        if (!e.candidate) {
+          return
+        }
 
-    // 3-1) ローカルトラックを追加（先に addTrack → createOffer）
-    localStream.getTracks().forEach(t => {
-      pc.addTrack(t, localStream);
-    });
-
-    // 3-2) ICE candidate をサーバへ中継
-    pc.onicecandidate = (ev) => {
-      if (ev.candidate && ws && ws.readyState === WebSocket.OPEN) {
-        const c = ev.candidate.toJSON(); // {candidate, sdpMid, sdpMLineIndex, usernameFragment}
-        ws.send(JSON.stringify({ type: "candidate", ...c }));
-        // サーバは webrtc.ICECandidateInit に詰めて AddICECandidate する想定
-        log("RTC: sent candidate");
+        ws.send(JSON.stringify({type: 'candidate', data: e.candidate}))
       }
-    };
 
-    // 3-3) 接続状態ログ
-    pc.oniceconnectionstatechange = () => log("ICE state: " + pc.iceConnectionState);
-    pc.onsignalingstatechange = () => log("Signaling: " + pc.signalingState);
+      ws.onopen = function(evt) {
+        console.log('open')
+        ws.send(JSON.stringify({type: 'offer'}))
+      }
 
-    // 3-4) Offer 生成・送信
-    try {
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer); // ufrag/pwd が入る
-      log("RTC: setLocalDescription(offer) OK");
-      wsSend({ type:"offer", sdp: pc.localDescription.sdp });
-    } catch (e) {
-      log("RTC offer error: " + e.message);
-      cleanup();
-      return;
-    }
+      ws.onclose = function(evt) {
+        // window.alert("Websocket has closed")
+      }
 
-    $("startBtn").disabled = true;
-    $("stopBtn").disabled = false;
-  }
+      ws.onmessage = function(evt) {
+        let msg = JSON.parse(evt.data)
+        if (!msg) {
+          return console.log('failed to parse msg')
+        }
+        console.log(msg)
+        switch (msg.type) {
+          case 'offer':
+            let offer = msg.data
+            if (!offer) {
+              return console.log('failed to parse answer')
+            }
+            console.log('set')
+            pc.setRemoteDescription(offer)
+            console.log('ok')
+            pc.createAnswer().then(answer => {
+              pc.setLocalDescription(answer)
+              ws.send(JSON.stringify({type: 'answer', data: { sdp: answer.sdp }}))
+              console.log('send answer')
+            })
+            return
 
-  async function stop(){
-    log("Stop pressed");
-    cleanup();
-    $("startBtn").disabled = false;
-    $("stopBtn").disabled = true;
-  }
+          case 'candidate':
+            let candidate = msg.data
+            if (!candidate) {
+              return console.log('failed to parse candidate')
+            }
 
-  function cleanup(){
-    if (pc) {
-      try { pc.getSenders().forEach(s => { try { s.replaceTrack(null); } catch(_){} }); } catch(_) {}
-      try { pc.close(); } catch(_) {}
-      pc = null;
-    }
-    if (localStream) {
-      localStream.getTracks().forEach(t => { try { t.stop(); } catch(_){} });
-      localStream = null;
-      $("local").srcObject = null;
-    }
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      try { ws.close(1000, "normal"); } catch(_) {}
-    }
-    ws = null;
-  }
+            pc.addIceCandidate(candidate)
+        }
+      }
 
-  function wsSend(obj){
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(obj));
-      log("WS → " + JSON.stringify(obj).slice(0, 200));
-    } else {
-      log("WS not open; drop: " + JSON.stringify(obj));
-    }
-  }
-
-  function safeParse(s){
-    try { return JSON.parse(s); } catch(_) { log("WS parse error: " + s); return null; }
-  }
-})();
-    console.log('broadcast')
-</script>
-</body>
+      ws.onerror = function(evt) {
+        console.log("ERROR: " + evt.data)
+      }
+    }).catch(window.alert)
+  </script>
 </html>
