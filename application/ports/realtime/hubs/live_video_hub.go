@@ -14,7 +14,6 @@ type RtcClient struct {
 
 type Interface interface {
     DeleteRoom(roomID int)
-    RoomExists(roomID int) bool
     SetRemoteDescription(roomID int, userID int, sdp string) error
     AddICECandidate(roomID, userID int, cand webrtc.ICECandidateInit) error
     SignalPeerConnections(roomId int) error

@@ -34,25 +34,6 @@ func (u *SetCandidateUsecase) Do(
 	err := u.roomRepository.AddICECandidate(params.RoomID, params.UserID, cand);if err != nil {
 		log.Error("%v", err)
 	}
-	// TODO どこかで共通化
-	msg := struct {
-		Type string      `json:"type"`
-		Data interface{} `json:"data"`
-	}{
-		Type: "set_candidate",
-		Data: struct {
-			RoomID      int    `json:"roomId"`
-			PublisherID string `json:"publisherId"`
-		}{
-			RoomID:      params.RoomID,
-			PublisherID: "publisherID",
-		},
-	}
-
-	if err := conn.WriteJSON(msg); err != nil {
-		log.Error("WriteJSON error:", err)
-		return err
-	}
 	log.Info("👌 Send: Set Candidate")
 	return nil
 }

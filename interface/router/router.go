@@ -65,8 +65,8 @@ func (r *Router) registerHttpRoutes(ctrls *controllers.Controllers) {
             ws.BeforeConnect = ctrls.WebsocketController.CreateLiveVideo
             // ws.OnDisconnect  = ctrls.LiveVideoController.CloseConnection
             ws.On("offer", ctrls.LiveVideoController.GetOffer)
-            // ws.On("candidate", ctrls.LiveVideoController.SetCandidate)
-            // ws.On("answer", ctrls.LiveVideoController.SetAnswer)
+            ws.On("candidate", ctrls.LiveVideoController.SetCandidate)
+            ws.On("answer", ctrls.LiveVideoController.SetAnswer)
             ws.On("viewer", ctrls.LiveVideoController.CreateViewPeerConnection)
         })
     })

@@ -27,28 +27,6 @@ func (u *SetAnswerUsecase) Do(
 	err := u.roomRepository.SetRemoteDescription(params.RoomID, params.UserID, message.SDP);if err != nil {
 		log.Error("%v", err)
 	}
-	// TODO どこかで共通化
-	msg := struct {
-		Type string `json:"type"`
-		Data struct {
-			RoomID      int    `json:"roomId"`
-			PublisherID string `json:"publisherId"`
-		} `json:"data"`
-	}{
-		Type: "answered",
-		Data: struct {
-			RoomID      int    `json:"roomId"`
-			PublisherID string `json:"publisherId"`
-		}{
-			RoomID:      params.RoomID,
-			PublisherID: "publisherID",
-		},
-	}
-
-	if err := conn.WriteJSON(msg); err != nil {
-		log.Error("WriteJSON error:", err)
-		return err
-	}
 	log.Debug("send answered")
 	return nil
 }

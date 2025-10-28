@@ -1,15 +1,13 @@
 package rooms_hub
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"time"
-
-	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v4"
 	"streaming-server.com/infrastructure/logger"
 	"streaming-server.com/infrastructure/webrtc/broadcast"
-	"streaming-server.com/infrastructure/ws"
 )
 
 type Hub struct {
@@ -29,35 +27,47 @@ func New() *Hub {
 	return &Hub{ rooms, sync.RWMutex{} }
 }
 
-func (h *Hub) RoomExists(roomID int) bool {
-	_, ok := h.rooms[roomID]
-	return ok
-}
+func (r *Hub) getOrCreate(roomID int) *Room {
+	room := r.rooms[roomID]
+	if room == nil {
+		room = &Room{
+			sync.RWMutex{},
+			make(map[int]*broadcast.PeerClient),
+			make(map[string]*webrtc.TrackLocalStaticRTP),
+			nil,
+		}
+		r.rooms[roomID] = room
+		ctx, cancel := context.WithCancel(context.Background())
+		room.cancelFunc = cancel // Roomにキャンセル関数を保存
 
-func (h *Hub) getOrCreate(roomID int) *Room {
-	rt := h.rooms[roomID]
-	if rt == nil {
-		rt = NewRoom()
-		h.rooms[roomID] = rt
+		go func() {
+			ticker := time.NewTicker(2 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					room.dispatchKeyFrame()
+				}
+			}
+		}()
 	}
-	return rt
+	return room
 }
 
-func (h *Hub) getRoom(roomID int) (*Room, error) {
-	room, ok := h.rooms[roomID];if !ok {
+func (r *Hub) getRoom(roomID int) (*Room, error) {
+	room, ok := r.rooms[roomID];if !ok {
 		return nil, errors.New("room not found")
 	}
-	return room, nil
-}
+	// request a keyframe every 3 seconds
+	go func() {
+		for range time.NewTicker(time.Second * 3).C {
+			room.dispatchKeyFrame()
+		}
+	}()
 
-func (h *Hub) getClient(roomID, userID int) (*broadcast.PeerClient, error) {
-	room, ok := h.rooms[roomID]; if !ok {
-		return nil, errors.New("client not found")
-	}
-	client, err := room.getClient(userID);if err != nil {
-		return nil, err
-	}
-	return client, nil
+	return room, nil
 }
 
 func (h *Hub) DeleteRoom(roomID int) {
@@ -69,7 +79,6 @@ func (h *Hub) AddPeerConnection(roomId, userId int, peerClient *broadcast.PeerCl
 	room.listLock.Lock()
 	room.clients[userId] = peerClient
 	room.listLock.Unlock()
-	log.Debug("AddPeerConnection: %v", room.clients[userId].Peer.ConnectionState())
 	return nil
 }
 
@@ -77,9 +86,11 @@ func (h *Hub) AddICECandidate(roomId, userId int, candidate webrtc.ICECandidateI
 	room, err := h.getRoom(roomId);if err != nil {
 		return err
 	}
+	room.listLock.Lock()
 	if err := room.clients[userId].Peer.AddICECandidate(candidate); err != nil {
 		return err
 	}
+	room.listLock.Unlock()
 	return nil
 }
 
@@ -136,7 +147,7 @@ func (h *Hub) SignalPeerConnections(roomId int) error {
 	room.listLock.Lock()
 	defer func() {
 		room.listLock.Unlock()
-		h.dispatchKeyFrame(room)
+		room.dispatchKeyFrame()
 	}()
 
 	attemptSync := func() (tryAgain bool) {
@@ -192,10 +203,7 @@ func (h *Hub) SignalPeerConnections(roomId int) error {
 				return true
 			}
 
-			if err = room.clients[i].WS.WriteJSON(&ws.WebsocketMessage{
-				Event: "offer",
-				Data:  offer,
-			}); err != nil {
+			if err = room.clients[i].WS.Send("offer", offer); err != nil {
 				return true
 			}
 		}
@@ -219,24 +227,4 @@ func (h *Hub) SignalPeerConnections(roomId int) error {
 		}
 	}
 	return nil
-}
-
-// dispatchKeyFrame sends a keyframe to all PeerConnections, used everytime a new user joins the call.
-func (h *Hub) dispatchKeyFrame(room *Room) {
-	room.listLock.Lock()
-	defer room.listLock.Unlock()
-
-	for i := range room.clients {
-		for _, receiver := range room.clients[i].Peer.GetReceivers() {
-			if receiver.Track() == nil {
-				continue
-			}
-
-			_ = room.clients[i].Peer.WriteRTCP([]rtcp.Packet{
-				&rtcp.PictureLossIndication{
-					MediaSSRC: uint32(receiver.Track().SSRC()),
-				},
-			})
-		}
-	}
 }

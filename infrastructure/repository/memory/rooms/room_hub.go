@@ -1,10 +1,12 @@
 package rooms_hub
 
 import (
+	"context"
 	"errors"
 	"sync"
 
 	"github.com/gorilla/websocket"
+	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v4"
 	"streaming-server.com/infrastructure/webrtc/broadcast"
 )
@@ -24,6 +26,7 @@ type Room struct {
 	listLock sync.RWMutex
 	clients map[int]*broadcast.PeerClient
 	trackLocals map[string]*webrtc.TrackLocalStaticRTP
+	cancelFunc context.CancelFunc
 }
 
 func NewRoom() *Room {
@@ -31,6 +34,7 @@ func NewRoom() *Room {
 		sync.RWMutex{},
 		make(map[int]*broadcast.PeerClient),
 		make(map[string]*webrtc.TrackLocalStaticRTP),
+		nil,
 	}
 }
 
@@ -54,40 +58,22 @@ func (r *Room) getClient(userID int) (*broadcast.PeerClient, error) {
 	return client, nil
 }
 
-// func (r *Room) addClient(userID int, conn *websocket.Conn) {
-// 	client := NewClient(userID, conn, nil)
-// 	r.clients[userID] = client
-// }
+// dispatchKeyFrame sends a keyframe to all PeerConnections, used everytime a new user joins the call.
+func (room *Room) dispatchKeyFrame() {
+	room.listLock.Lock()
+	defer room.listLock.Unlock()
 
-// func (r *Room) removeClient(userID int) error {
-// 	client, err := r.getClient(userID)
-// 	if err != nil {
-// 		return err
-// 	}
+	for i := range room.clients {
+		for _, receiver := range room.clients[i].Peer.GetReceivers() {
+			if receiver.Track() == nil {
+				continue
+			}
 
-// 	if client.Conn != nil {
-// 		_ = client.Conn.Close()
-// 		client.Conn = nil
-// 	}
-// 	if client.PeerConn != nil {
-// 		_ = client.PeerConn.Close()
-// 		client.PeerConn = nil
-// 	}
-
-// 	delete(r.clients, userID)
-// 	log.Info("🧹 Removed client: %d", userID)
-// 	return nil
-// }
-
-
-// func (r *Room) HasClient() bool {
-// 	return 0 < len(r.clients)
-// }
-
-// func (c *RtcClient) HasPeerConnection() bool {
-// 	return c.PeerConn != nil
-// }
-
-// func (c *RtcClient) ClosePeerConnection() {
-// 	c.PeerConn.Close()
-// }
+			_ = room.clients[i].Peer.WriteRTCP([]rtcp.Packet{
+				&rtcp.PictureLossIndication{
+					MediaSSRC: uint32(receiver.Track().SSRC()),
+				},
+			})
+		}
+	}
+}

@@ -24,9 +24,9 @@
       if (event.track.kind === 'audio') {
         return
       }
-      const stream = event.streams[0] || new MediaStream([event.track]);
+
       let el = document.createElement(event.track.kind)
-      el.srcObject = stream
+      el.srcObject = event.streams[0]
       el.autoplay = true
       el.controls = true
       document.getElementById('remoteVideos').appendChild(el)
@@ -35,14 +35,14 @@
         el.play()
       }
 
-      stream.onremovetrack = ({track}) => {
+      event.streams[0].onremovetrack = ({track}) => {
         if (el.parentNode) {
           el.parentNode.removeChild(el)
         }
       }
     }
 
-    let ws = new WebSocket(`ws://localhost:8080/ws/live/1/${Math.floor(Math.random() * (10000 + 1))}`)
+    let ws = new WebSocket(`ws://localhost:8080/ws/live/1/${Math.floor(Math.random() * 1000)}`)
     pc.onicecandidate = e => {
       if (!e.candidate) {
         return
@@ -60,7 +60,7 @@
       if (!msg) {
         return console.log('failed to parse msg')
       }
-      console.log(msg)
+
       switch (msg.event) {
         case 'offer':
           let offer = msg.data
@@ -71,7 +71,6 @@
           pc.createAnswer().then(answer => {
             pc.setLocalDescription(answer)
             ws.send(JSON.stringify({event: 'answer', data: answer}))
-            console.log('send answer')
           })
           return
 
@@ -84,13 +83,11 @@
           pc.addIceCandidate(candidate)
       }
     }
-
+    ws.onopen = function(evt) {
+      ws.send(JSON.stringify({event: 'offer'}))
+    }
     ws.onerror = function(evt) {
       console.log("ERROR: " + evt.data)
-    }
-    ws.onopen = () => {
-      console.log('ok')
-      ws.send(JSON.stringify({event: 'viewer'}))
     }
   </script>
 </html>
