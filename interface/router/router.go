@@ -63,7 +63,7 @@ func (r *Router) registerHttpRoutes(ctrls *controllers.Controllers) {
     r.GroupWithPrefix("/ws", []Adapter{middleware.AuthMiddleware}, func(g *Router) {
         g.WS("/live/{roomId}/{userId}", func(ws *WSRoute) {
             ws.BeforeConnect = ctrls.WebsocketController.CreateLiveVideo
-            // ws.OnDisconnect  = ctrls.LiveVideoController.CloseConnection
+            ws.OnDisconnect  = ctrls.LiveVideoController.CloseConnection
             ws.On("offer", ctrls.LiveVideoController.GetOffer)
             ws.On("candidate", ctrls.LiveVideoController.SetCandidate)
             ws.On("answer", ctrls.LiveVideoController.SetAnswer)

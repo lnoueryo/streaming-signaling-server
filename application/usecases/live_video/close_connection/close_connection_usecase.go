@@ -26,6 +26,7 @@ func (u *CloseConnectionUsecase) Do(
 	conn *ws.ThreadSafeWriter,
 ) error {
 	log.Debug("🧩 RemoveClient called: room=%d user=%d", params.RoomID, params.UserID)
-	// u.roomRepository.RemoveClient(params.RoomID, params.UserID)
+	u.roomRepository.ClosePeerConnection(params.RoomID, params.UserID)
+	u.roomRepository.SignalPeerConnections(params.RoomID)
 	return nil
 }

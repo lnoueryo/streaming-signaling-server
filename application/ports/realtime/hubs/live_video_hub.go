@@ -18,6 +18,7 @@ type Interface interface {
     AddICECandidate(roomID, userID int, cand webrtc.ICECandidateInit) error
     SignalPeerConnections(roomId int) error
     AddPeerConnection(roomID, userId int, peerConnection *broadcast.PeerClient) error
+    ClosePeerConnection(roomID, userId int) error
     AddTrack(roomId int, t *webrtc.TrackLocalStaticRTP) error
     RemoveTrack(roomId int, t *webrtc.TrackLocalStaticRTP) error
 }

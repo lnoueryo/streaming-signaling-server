@@ -82,6 +82,16 @@ func (h *Hub) AddPeerConnection(roomId, userId int, peerClient *broadcast.PeerCl
 	return nil
 }
 
+func (h *Hub) ClosePeerConnection(roomId, userId int) error {
+	room, err := h.getRoom(roomId);if err != nil {
+		return err
+	}
+	room.listLock.Lock()
+	room.clients[userId].Peer.Close()
+	room.listLock.Unlock()
+	return nil
+}
+
 func (h *Hub) AddICECandidate(roomId, userId int, candidate webrtc.ICECandidateInit) error {
 	room, err := h.getRoom(roomId);if err != nil {
 		return err
@@ -141,6 +151,7 @@ func (h *Hub) RemoveTrack(roomId int, t *webrtc.TrackLocalStaticRTP) error {
 
 // signalPeerConnections updates each PeerConnection so that it is getting all the expected media tracks.
 func (h *Hub) SignalPeerConnections(roomId int) error {
+	log.Debug("SignalPeerConnections")
 	room, err := h.getRoom(roomId);if err != nil {
 		return err
 	}
@@ -153,9 +164,15 @@ func (h *Hub) SignalPeerConnections(roomId int) error {
 	attemptSync := func() (tryAgain bool) {
 		for i := range room.clients {
 			if room.clients[i].Peer.ConnectionState() == webrtc.PeerConnectionStateClosed {
+				log.Debug("delete peer: %v", room.clients[i].Peer.ConnectionState())
 				room.clients[i].Peer.Close()
-				log.Error("delete peer: %v", room.clients[i].Peer.ConnectionState())
+				room.clients[i].Peer = nil
+				room.clients[i].WS.Close()
+				room.clients[i].WS = nil
 				delete(room.clients, i)
+				if len(room.clients) == 0 {
+					delete(h.rooms, roomId)
+				}
 				return true
 			}
 
