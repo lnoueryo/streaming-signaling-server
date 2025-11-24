@@ -1,6 +1,6 @@
 package create_live_video_usecase
 
 type CreateLiveVideoInput struct {
-	RoomID int
+	RoomID string
 	UserID int
 }

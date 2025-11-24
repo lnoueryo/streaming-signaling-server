@@ -71,8 +71,6 @@ func (u *GetOfferUsecase) Do(
 		}
 		room.AddTrack(trackLocal)
 		defer room.RemoveTrack(trackLocal)
-		room.AddTrack(trackLocal)
-		defer room.RemoveTrack(trackLocal)
 
 		buf := make([]byte, 1500)
 		rtpPkt := &rtp.Packet{}

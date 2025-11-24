@@ -11,12 +11,12 @@ import (
 
 
 type CreateLiveVideoParams struct {
-	RoomID int
+	RoomID string
 	UserID int
 }
 
 type Query struct {
-	RoomID int
+	RoomID string
 	UserID int
 }
 
@@ -70,14 +70,7 @@ func(c *CreateLiveVideoParams) getRoomId(params map[string]string) error {
 	roomId, ok := params["roomId"];if !ok {
 		return errors.New("no roomId")
 	}
-	id, err := strconv.Atoi(roomId)
-	if err != nil {
-		return errors.New("invalid roomId format")
-	}
-	if id <= 0 {
-		return errors.New("invalid roomId value")
-	}
-	c.RoomID = id
+	c.RoomID = roomId
 	return nil
 }
 

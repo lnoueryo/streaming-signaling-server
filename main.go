@@ -19,7 +19,6 @@ import (
 
 func main() {
 	roomRepository := room_memory_repository.NewRoomRepository()
-	// roomRepository := rooms_hub.New()
 	createLiveVideoUseccase := create_live_video_usecase.NewCreateLiveVideo()
 	getOfferUsecase := get_offer_usecase.NewGetOffer(roomRepository)
 	createViewerPeerConnectionUsecase := create_viewer_peer_connection_usecase.NewCreateViewerPeerConnection(roomRepository)

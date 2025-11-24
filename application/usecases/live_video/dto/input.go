@@ -1,6 +1,6 @@
 package live_video_dto
 
 type Params struct {
-	RoomID int
+	RoomID string
 	UserID int
 }

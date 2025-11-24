@@ -5,7 +5,7 @@ import (
 )
 
 type IRoomRepository interface {
-    GetOrCreate(int) *room_entity.RuntimeRoom
-    GetRoom(int) (*room_entity.RuntimeRoom, error)
-    DeleteRoom(int)
+    GetOrCreate(string) *room_entity.RuntimeRoom
+    GetRoom(string) (*room_entity.RuntimeRoom, error)
+    DeleteRoom(string)
 }

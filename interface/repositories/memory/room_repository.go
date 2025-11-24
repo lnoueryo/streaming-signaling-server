@@ -11,7 +11,7 @@ import (
 )
 
 type RoomRepository struct {
-	rooms map[int]*room_entity.RuntimeRoom // roomId -> runtime
+	rooms map[string]*room_entity.RuntimeRoom // roomId -> runtime
 	mu    sync.RWMutex
 }
 
@@ -21,18 +21,17 @@ var (
 )
 
 func NewRoomRepository() *RoomRepository {
-	rooms := make(map[int]*room_entity.RuntimeRoom)
+	rooms := make(map[string]*room_entity.RuntimeRoom)
 	return &RoomRepository{ rooms, sync.RWMutex{} }
 }
 
-func (r *RoomRepository) GetOrCreate(roomId int) *room_entity.RuntimeRoom {
+func (r *RoomRepository) GetOrCreate(roomId string) *room_entity.RuntimeRoom {
 	room := r.rooms[roomId]
 	if room == nil {
 		room = room_entity.NewRuntimeRoom(roomId)
 		r.rooms[roomId] = room
 		ctx, cancel := context.WithCancel(context.Background())
 		room.AddCancelFunc(cancel)
-
 		go func() {
 			ticker := time.NewTicker(2 * time.Second)
 			defer ticker.Stop()
@@ -49,7 +48,7 @@ func (r *RoomRepository) GetOrCreate(roomId int) *room_entity.RuntimeRoom {
 	return room
 }
 
-func (r *RoomRepository) GetRoom(roomId int) (*room_entity.RuntimeRoom, error) {
+func (r *RoomRepository) GetRoom(roomId string) (*room_entity.RuntimeRoom, error) {
 	room, ok := r.rooms[roomId];if !ok {
 		return nil, errors.New("room not found")
 	}
@@ -63,6 +62,6 @@ func (r *RoomRepository) GetRoom(roomId int) (*room_entity.RuntimeRoom, error) {
 	return room, nil
 }
 
-func (h *RoomRepository) DeleteRoom(roomId int) {
+func (h *RoomRepository) DeleteRoom(roomId string) {
 	delete(h.rooms, roomId)
 }

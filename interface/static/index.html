@@ -44,7 +44,7 @@
       el.muted = false
     }
 
-    let ws = new WebSocket(`ws://localhost:8080/ws/live/1/${Math.floor(Math.random() * 1000)}`)
+    let ws = new WebSocket(`/ws/live/1/${Math.floor(Math.random() * 1000)}`)
     pc.onicecandidate = e => {
       if (!e.candidate) {
         return

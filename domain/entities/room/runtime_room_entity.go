@@ -3,6 +3,7 @@ package room_entity
 import (
 	"context"
 	"errors"
+	"os/exec"
 	"sync"
 	"time"
 
@@ -12,21 +13,31 @@ import (
 )
 
 type RuntimeRoom struct {
-	ID int
+	ID string
 	listLock sync.RWMutex
 	Users map[int]*user_entity.RuntimeUser
 	trackLocals map[string]*webrtc.TrackLocalStaticRTP
 	cancelFunc context.CancelFunc
+	FfmpegCmd *exec.Cmd
+    VideoIn int
+    AudioIn int
+    OutPort int
+    SdpPath string
 }
 
 
-func NewRuntimeRoom(id int) *RuntimeRoom {
+func NewRuntimeRoom(id string) *RuntimeRoom {
 	return &RuntimeRoom{
 		id,
 		sync.RWMutex{},
 		make(map[int]*user_entity.RuntimeUser),
 		make(map[string]*webrtc.TrackLocalStaticRTP),
 		nil,
+		nil,
+		0,
+		0,
+		0,
+		"",
 	}
 }
 

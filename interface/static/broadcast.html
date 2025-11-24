@@ -52,7 +52,7 @@
       document.getElementById('localVideo').srcObject = stream
       stream.getTracks().forEach(track => pc.addTrack(track, stream))
 
-      let ws = new WebSocket(`ws://localhost:8080/ws/live/1/${Math.floor(Math.random() * (10000 + 1))}`)
+      let ws = new WebSocket(`/ws/live/1/${Math.floor(Math.random() * (10000 + 1))}`)
       pc.onicecandidate = e => {
         if (!e.candidate) {
           return

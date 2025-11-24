@@ -29,27 +29,13 @@ func (raw *RawParams) parse(ctx context.Context) (*live_video_dto.Params, error)
 	}
 	raw.UserID = rawUserId
 
-	roomID, err := raw.getRoomId();if err != nil {
-		return params, err
-	}
 	userID, err := raw.getUserId();if err != nil {
 		return params, err
 	}
 
-	params.RoomID = roomID
+	params.RoomID = raw.RoomID
 	params.UserID = userID
 	return params, nil
-}
-
-func (raw *RawParams) getRoomId() (int, error) {
-	id, err := strconv.Atoi(raw.RoomID)
-	if err != nil {
-		return id, errors.New("invalid roomId format")
-	}
-	if id <= 0 {
-		return id, errors.New("invalid roomId value")
-	}
-	return id, nil
 }
 
 func (raw *RawParams) getUserId() (int, error) {
