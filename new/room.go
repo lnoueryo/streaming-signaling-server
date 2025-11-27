@@ -67,17 +67,15 @@ func (r *Room) dispatchKeyFrame() {
 
 // signalPeerConnections updates each PeerConnection so that it is getting all the expected media tracks.
 func (r *Room) signalPeerConnections() {
-	room, _ := rooms.getRoom(r.ID)
-	room.listLock.Lock()
 	defer func() {
-		room.listLock.Unlock()
-		room.dispatchKeyFrame()
+		r.listLock.Unlock()
+		r.dispatchKeyFrame()
 	}()
 	attemptSync := func() (tryAgain bool) {
-		for i := range room.clients {
-			if room.clients[i].Peer.ConnectionState() == webrtc.PeerConnectionStateClosed {
-				delete(room.clients, i)
-				if len(room.clients) == 0 {
+		for i := range r.clients {
+			if r.clients[i].Peer.ConnectionState() == webrtc.PeerConnectionStateClosed {
+				delete(r.clients, i)
+				if len(r.clients) == 0 {
 					delete(rooms.item, r.ID)
 				}
 				return true // We modified the slice, start from the beginning
@@ -86,7 +84,7 @@ func (r *Room) signalPeerConnections() {
 			// map of sender we already are seanding, so we don't double send
 			existingSenders := map[string]bool{}
 
-			for _, sender := range room.clients[i].Peer.GetSenders() {
+			for _, sender := range r.clients[i].Peer.GetSenders() {
 				if sender.Track() == nil {
 					continue
 				}
@@ -94,15 +92,15 @@ func (r *Room) signalPeerConnections() {
 				existingSenders[sender.Track().ID()] = true
 
 				// If we have a RTPSender that doesn't map to a existing track remove and signal
-				if _, ok := room.trackLocals[sender.Track().ID()]; !ok {
-					if err := room.clients[i].Peer.RemoveTrack(sender); err != nil {
+				if _, ok := r.trackLocals[sender.Track().ID()]; !ok {
+					if err := r.clients[i].Peer.RemoveTrack(sender); err != nil {
 						return true
 					}
 				}
 			}
 
 			// Don't receive videos we are sending, make sure we don't have loopback
-			for _, receiver := range room.clients[i].Peer.GetReceivers() {
+			for _, receiver := range r.clients[i].Peer.GetReceivers() {
 				if receiver.Track() == nil {
 					continue
 				}
@@ -111,24 +109,24 @@ func (r *Room) signalPeerConnections() {
 			}
 
 			// Add all track we aren't sending yet to the PeerConnection
-			for trackID := range room.trackLocals {
+			for trackID := range r.trackLocals {
 				if _, ok := existingSenders[trackID]; !ok {
-					if _, err := room.clients[i].Peer.AddTrack(room.trackLocals[trackID]); err != nil {
+					if _, err := r.clients[i].Peer.AddTrack(r.trackLocals[trackID]); err != nil {
 						return true
 					}
 				}
 			}
 
-			offer, err := room.clients[i].Peer.CreateOffer(nil)
+			offer, err := r.clients[i].Peer.CreateOffer(nil)
 			if err != nil {
 				return true
 			}
 
-			if err = room.clients[i].Peer.SetLocalDescription(offer); err != nil {
+			if err = r.clients[i].Peer.SetLocalDescription(offer); err != nil {
 				return true
 			}
 
-			if err = room.clients[i].WS.Send("offer", offer); err != nil {
+			if err = r.clients[i].WS.Send("offer", offer); err != nil {
 				return true
 			}
 		}
@@ -140,11 +138,10 @@ func (r *Room) signalPeerConnections() {
 		if syncAttempt == 25 {
 			// Release the lock and attempt a sync in 3 seconds. We might be blocking a RemoveTrack or AddTrack
 			go func() {
-				if r == nil {
-					return
+				if r != nil {
+					time.Sleep(time.Second * 3)
+					r.signalPeerConnections()
 				}
-				time.Sleep(time.Second * 3)
-				r.signalPeerConnections()
 			}()
 			return
 		}

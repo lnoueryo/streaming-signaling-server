@@ -108,7 +108,11 @@ func websocketBroadcastHandler(c *gin.Context) {
 		log.Info("Got remote track: Kind=%s, ID=%s, PayloadType=%d", t.Kind(), t.ID(), t.PayloadType())
 
 		trackLocal := room.addTrack(t)
-		defer room.removeTrack(trackLocal)
+		defer func() {
+			if room != nil {
+				room.removeTrack(trackLocal)
+			}
+		}()
 
 		buf := make([]byte, 1500)
 		rtpPkt := &rtp.Packet{}
