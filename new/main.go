@@ -67,6 +67,10 @@ func websocketBroadcastHandler(c *gin.Context) {
 	// Add our new PeerConnection to global list
 	room := rooms.getOrCreate(roomId)
 	room.listLock.Lock()
+	client, ok := room.clients[userId];if ok {
+		client.WS.Close()
+		client.Peer.Close()
+	}
 	room.clients[userId] = &RTCSession{ws, pc}
 	room.listLock.Unlock()
 
