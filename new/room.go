@@ -138,10 +138,12 @@ func (r *Room) signalPeerConnections() {
 		if syncAttempt == 25 {
 			// Release the lock and attempt a sync in 3 seconds. We might be blocking a RemoveTrack or AddTrack
 			go func() {
+				if r == nil {
+					return
+				}
 				time.Sleep(time.Second * 3)
 				r.signalPeerConnections()
 			}()
-
 			return
 		}
 
