@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -42,6 +43,9 @@ var rooms = &Rooms{
 type RTCSession struct {
 	WS *ThreadSafeWriter
     Peer      *webrtc.PeerConnection
+    sigMu       sync.Mutex
+    makingOffer bool
+    needRenego  bool
 }
 
 func websocketBroadcastHandler(c *gin.Context) {
@@ -71,7 +75,7 @@ func websocketBroadcastHandler(c *gin.Context) {
 		client.WS.Close()
 		client.Peer.Close()
 	}
-	room.clients[userId] = &RTCSession{ws, pc}
+	room.clients[userId] = &RTCSession{ws, pc, sync.Mutex{}, false, false}
 	room.listLock.Unlock()
 
 	// Trickle ICE. Emit server candidate to client
@@ -91,16 +95,22 @@ func websocketBroadcastHandler(c *gin.Context) {
 
 		switch p {
 		case webrtc.PeerConnectionStateFailed:
-			if err := pc.Close(); err != nil {
-				log.Errorf("Failed to close PeerConnection: %v", err)
-			}
+			_ = pc.Close()
 		case webrtc.PeerConnectionStateDisconnected:
-			if err := pc.Close(); err != nil {
-				log.Errorf("Failed to close PeerConnection: %v", err)
-			}
+			// 猶予を与える
+			go func() {
+				time.Sleep(20 * time.Second)
+				if pc.ConnectionState() == webrtc.PeerConnectionStateDisconnected {
+					_ = pc.Close()
+				}
+			}()
 		case webrtc.PeerConnectionStateClosed:
+			// クライアント即削除（部屋ロック下で）
+			room := rooms.getOrCreate(roomId)
+			room.listLock.Lock()
+			delete(room.clients, userId)
+			room.listLock.Unlock()
 			signalPeerConnections(roomId)
-		default:
 		}
 	})
 
@@ -190,10 +200,26 @@ func websocketBroadcastHandler(c *gin.Context) {
 
 			if err := pc.SetRemoteDescription(answer); err != nil {
 				log.Errorf("Failed to set remote description: %v", err)
-
 				return
 			}
-		case "ping":
+
+			// オファー直列化の解除と再実行
+			room, _ := rooms.getRoom(roomId)
+			room.listLock.RLock()
+			cli := room.clients[userId]
+			room.listLock.RUnlock()
+			if cli != nil {
+				cli.sigMu.Lock()
+				cli.makingOffer = false
+				doAgain := cli.needRenego
+				cli.needRenego = false
+				cli.sigMu.Unlock()
+
+				if doAgain {
+					// 再度差分反映（今度は makingOffer=false なので実行される）
+					go signalPeerConnections(roomId)
+				}
+			}
 		default:
 			log.Errorf("unknown message: %+v", message)
 		}

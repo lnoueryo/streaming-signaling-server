@@ -129,21 +129,33 @@ func signalPeerConnections(id string) {
         ws := cli.WS // WS参照
 
         // 2) PC/WSの操作はロック外で走らせる関数として用意
-        ops = append(ops, func() bool {
-            // Remove
-            for _, s := range toRemove {
-                if err := pc.RemoveTrack(s); err != nil { return true }
-            }
-            // Add
-            for _, tl := range toAdd {
-                if _, err := pc.AddTrack(tl); err != nil { return true }
-            }
-            // Renegotiate
-            offer, err := pc.CreateOffer(nil); if err != nil { return true }
-            if err = pc.SetLocalDescription(offer); err != nil { return true }
-            if err = ws.Send("offer", offer); err != nil { return true }
-            return false
-        })
+		ops = append(ops, func() bool {
+			cli.sigMu.Lock()
+			defer cli.sigMu.Unlock()
+
+			if cli.makingOffer {
+				// いま別のトリガで offer 中 → 後で一度だけやり直す印を付けて終わり
+				cli.needRenego = true
+				return false
+			}
+			cli.makingOffer = true
+
+			// Remove / Add はそのまま
+			for _, s := range toRemove {
+				if err := pc.RemoveTrack(s); err != nil { /* ログ */ }
+			}
+			for _, tl := range toAdd {
+				if _, err := pc.AddTrack(tl); err != nil { /* ログ */ }
+			}
+
+			offer, err := pc.CreateOffer(nil)
+			if err != nil { cli.makingOffer = false; return true }
+			if err = pc.SetLocalDescription(offer); err != nil { cli.makingOffer = false; return true }
+			if err = ws.Send("offer", offer); err != nil { cli.makingOffer = false; return true }
+
+			// ここでは makingOffer=true のまま。answer 受領で解除する
+			return false
+		})
     }
 
     room.listLock.Unlock()
