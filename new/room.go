@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 	"github.com/pion/rtcp"
@@ -19,7 +18,7 @@ type Room struct {
 }
 
 func addTrack(id string, t *webrtc.TrackRemote) *webrtc.TrackLocalStaticRTP {
-	room, err := rooms.getRoom(id);if err != nil {
+	room, ok := rooms.getRoom(id);if !ok {
 		return nil
 	}
 	room.listLock.Lock()
@@ -36,7 +35,7 @@ func addTrack(id string, t *webrtc.TrackRemote) *webrtc.TrackLocalStaticRTP {
 }
 
 func removeTrack(id string, t *webrtc.TrackLocalStaticRTP) {
-	room, err := rooms.getRoom(id);if err != nil {
+	room, ok := rooms.getRoom(id);if !ok {
 		return
 	}
 	room.listLock.Lock()
@@ -49,7 +48,7 @@ func removeTrack(id string, t *webrtc.TrackLocalStaticRTP) {
 }
 
 func addRemoteTrack(id string, t *webrtc.TrackRemote) {
-	room, err := rooms.getRoom(id);if err != nil {
+	room, ok := rooms.getRoom(id);if !ok {
 		return
 	}
 	room.listLock.Lock()
@@ -58,7 +57,7 @@ func addRemoteTrack(id string, t *webrtc.TrackRemote) {
 }
 
 func removeRemoteTrack(id string, t *webrtc.TrackRemote) {
-	room, err := rooms.getRoom(id);if err != nil {
+	room, ok := rooms.getRoom(id);if !ok {
 		return
 	}
 	room.listLock.Lock()
@@ -68,8 +67,8 @@ func removeRemoteTrack(id string, t *webrtc.TrackRemote) {
 
 // dispatchKeyFrame sends a keyframe to all PeerConnections, used everytime a new user joins the call.
 func dispatchKeyFrame(id string) {
-    room, err := rooms.getRoom(id)
-    if err != nil { return }
+    room, ok := rooms.getRoom(id)
+    if !ok { return }
 
     // 収集だけロック下で
     type target struct{ pc *webrtc.PeerConnection; ssrc uint32 }
@@ -95,8 +94,8 @@ func dispatchKeyFrame(id string) {
 
 // signalPeerConnections updates each PeerConnection so that it is getting all the expected media tracks.
 func signalPeerConnections(id string) {
-    room, err := rooms.getRoom(id)
-    if err != nil { return }
+    room, ok := rooms.getRoom(id)
+    if !ok { return }
 
     type applyFn func() bool // true=要リトライ
     var ops []applyFn
@@ -235,14 +234,14 @@ func (r *Rooms) getOrCreate(id string) *Room {
     return room
 }
 
-func (r *Rooms) getRoom(id string) (*Room, error) {
+func (r *Rooms) getRoom(id string) (*Room, bool) {
     r.lock.RLock()
     room, ok := r.item[id]
     r.lock.RUnlock()
     if !ok {
-        return nil, errors.New("room not found")
+        return nil, false
     }
-    return room, nil
+    return room, true
 }
 
 func (r *Rooms) deleteRoom(id string) {

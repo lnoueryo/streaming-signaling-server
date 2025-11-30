@@ -26,6 +26,8 @@ func main() {
 		})
 	})
 	r.GET("/ws/live/:roomId", websocketBroadcastHandler)
+	r.GET("/ws/live/:roomId/user", websocketBroadcastHandler)
+	r.GET("/ws/live/:roomId/user/delete", websocketBroadcastHandler)
 	r.Run(":8080")
 }
 
@@ -38,7 +40,6 @@ var rooms = &Rooms{
 	sync.RWMutex{},
 }
 
-
 type RTCSession struct {
 	WS *ThreadSafeWriter
     Peer      *webrtc.PeerConnection
@@ -48,15 +49,19 @@ type RTCSession struct {
 }
 
 func websocketBroadcastHandler(c *gin.Context) {
-	userVal, exists := c.Get("user")
-	if !exists {
-		log.Warn("user not found in context")
-		return
-	}
-	user := userVal.(UserInfo)
-
+	user := getUser(c)
 	roomId := c.Param("roomId")
 	userId := user.ID
+	room, ok := rooms.getRoom(roomId);if ok {
+		_, ok := room.clients[userId];if ok {
+			errMsg := "他の端末で参加しています。"
+			log.Warn(errMsg)
+			c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
+			return
+		}
+		
+	}
+
 	unsafeConn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Error("Failed to upgrade HTTP to Websocket: ", err)
@@ -70,7 +75,7 @@ func websocketBroadcastHandler(c *gin.Context) {
 	defer pc.Close() //nolint
 
 	// Add our new PeerConnection to global list
-	room := rooms.getOrCreate(roomId)
+	room = rooms.getOrCreate(roomId)
 	room.listLock.Lock()
 	client, ok := room.clients[userId];if ok {
 		client.WS.Close()
@@ -225,4 +230,36 @@ func websocketBroadcastHandler(c *gin.Context) {
 			log.Errorf("unknown message: %+v", message)
 		}
 	}
+}
+
+func deleteWebsocketClient(c *gin.Context) {
+	user := getUser(c)
+	roomId := c.Param("roomId")
+	userId := user.ID
+	room, ok := rooms.getRoom(roomId); if !ok {
+		errMsg := "既にトークルームが存在していません"
+		log.Warn(errMsg)
+		c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
+		return
+	}
+	client, ok := room.clients[userId]; if !ok {
+		errMsg := "トークルームにユーザーは参加していません"
+		log.Warn(errMsg)
+		c.JSON(http.StatusNoContent, gin.H{})
+		return
+	}
+	
+	client.Peer.Close()
+	client.WS.Close()
+	// var data interface{}
+	// client.WS.Send("close", data)
+	c.JSON(http.StatusNoContent, gin.H{})
+}
+
+func getUser(c *gin.Context) UserInfo {
+	userVal, exists := c.Get("user")
+	if !exists {
+		return UserInfo{}
+	}
+	return userVal.(UserInfo)
 }
