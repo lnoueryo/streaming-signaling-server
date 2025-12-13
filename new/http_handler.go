@@ -37,7 +37,22 @@ func removeParticipant(c *gin.Context) {
 	participant.WS.Close()
 	delete(room.wsConnections, participant.WS.Conn)
 	room.listLock.Unlock()
-	c.JSON(http.StatusNoContent, gin.H{})
+	participants := make([]gin.H, 0, len(room.participants))
+	for _, participant := range room.participants {
+		if participant.PC.ConnectionState() == webrtc.PeerConnectionStateConnected {
+			participants = append(participants, gin.H{
+				"id": participant.ID,
+				"name": participant.Name,
+				"email": participant.Email,
+				"image": participant.Image,
+			})
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"id": room.ID,
+		"participants": participants,
+	})
 }
 
 func getRoom(c *gin.Context) {
@@ -66,7 +81,7 @@ func getRoom(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"id": room.ID,
-		"users": participants,
+		"participants": participants,
 	})
 }
 

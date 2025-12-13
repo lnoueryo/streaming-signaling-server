@@ -35,12 +35,14 @@ func websocketHandler(c *gin.Context) {
 
     // ---- clean up ----
     defer func() {
+        room.listLock.Lock()
+        // 複数のデバイスでロビーに入室し、
+        // 1つだけルームにいる状態でロビーのどれかのデバイスがリロードすると
+        // ルームの方のPeerConnectionも切れてしまうため、peerConnectionがある時のみクローズ
         if peerConnection != nil {
             peerConnection.Close()
+            delete(room.participants, user.ID)
         }
-
-        room.listLock.Lock()
-        delete(room.participants, user.ID)
         delete(room.wsConnections, ws.Conn)
         room.listLock.Unlock()
 
