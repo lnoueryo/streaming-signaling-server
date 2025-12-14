@@ -30,6 +30,8 @@ func websocketHandler(c *gin.Context) {
     room.listLock.Lock()
     room.wsConnections[ws.Conn] = ws
     room.listLock.Unlock()
+    res, _ := json.Marshal(room.GetSliceParticipants())
+    ws.Send("access", string(res))
 
     var peerConnection *webrtc.PeerConnection
 
@@ -108,19 +110,18 @@ func websocketHandler(c *gin.Context) {
 					room, ok := rooms.getRoom(roomId);if !ok {
 						return
 					}
-					users := make([]UserInfo, 0)
+					participants := make([]UserInfo, 0)
 					for _, participant := range room.participants {
-						users = append(users, UserInfo{
+						participants = append(participants, UserInfo{
 							ID: participant.ID,
 							Name: participant.Name,
 							Email: participant.Email,
 							Image: participant.Image,
 						})
 					}
-					res, _ := json.Marshal(users)
-					for _, conn := range room.wsConnections {
-						conn.Send("access", string(res))
-					}
+					res, _ := json.Marshal(participants)
+                    room.BroadcastLobby("access", string(res))
+
 				case webrtc.PeerConnectionStateFailed:
 					_ = peerConnection.Close()
 				case webrtc.PeerConnectionStateDisconnected:
@@ -156,13 +157,23 @@ func websocketHandler(c *gin.Context) {
 
             // ----- track handler -----
             peerConnection.OnTrack(func(t *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
-                log.Infof("Got remote track: %s %s", t.Kind(), t.ID())
-
+                log.Infof("Got remote track: %s %s %s %s %s", t.Kind(), t.ID(), t.StreamID(), t.Msid(), t.RID())
                 trackLocal := addTrack(room, t)
                 if trackLocal == nil {
                     return
                 }
-                defer removeTrack(room, trackLocal)
+                track := &TrackParticipant{
+                    user,
+                    t.StreamID(),
+                    t.ID(),
+                }
+                trackParticipants[t.StreamID()] = track
+                jsonData, _ := json.Marshal(trackParticipants)
+                defer func() {
+                    removeTrack(room, trackLocal)
+                    delete(trackParticipants, t.StreamID())
+                }()
+                room.BroadcastParticipants("track-participant", string(jsonData))
 
                 buf := make([]byte, 1500)
                 pkt := &rtp.Packet{}

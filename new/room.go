@@ -21,6 +21,13 @@ type Participant struct {
 	PC *webrtc.PeerConnection
 }
 
+type TrackParticipant struct{
+    UserInfo
+    StreamID string `json:"streamId"`
+    TrackID  string `json:"trackId"`
+}
+var trackParticipants = map[string]*TrackParticipant{}
+
 type Room struct {
 	ID           string
 	listLock     sync.Mutex
@@ -29,6 +36,26 @@ type Room struct {
 	trackLocals   map[string]*webrtc.TrackLocalStaticRTP
 	trackRemotes  map[string]*webrtc.TrackRemote
 	cancelFunc    context.CancelFunc
+}
+
+func (r *Room) BroadcastLobby(event string, data string) {
+    for _, conn := range r.wsConnections {
+        conn.Send(event, data)
+    }
+}
+
+func (r *Room) BroadcastParticipants(event string, data string) {
+    for _, participant := range r.participants {
+        participant.WS.Send(event, data)
+    }
+}
+
+func (r *Room) GetSliceParticipants() []*UserInfo {
+    participants := make([]*UserInfo, 0)
+    for _, participant := range r.participants {
+        participants = append(participants, &participant.UserInfo)
+    }
+    return participants
 }
 
 type Rooms struct {
