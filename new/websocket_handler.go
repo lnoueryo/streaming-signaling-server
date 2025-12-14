@@ -167,11 +167,11 @@ func websocketHandler(c *gin.Context) {
                     t.StreamID(),
                     t.ID(),
                 }
-                trackParticipants[t.StreamID()] = track
-                jsonData, _ := json.Marshal(trackParticipants)
+                room.trackParticipants[t.StreamID()] = track
+                jsonData, _ := json.Marshal(room.trackParticipants)
                 defer func() {
                     removeTrack(room, trackLocal)
-                    delete(trackParticipants, t.StreamID())
+                    delete(room.trackParticipants, t.StreamID())
                 }()
                 room.BroadcastParticipants("track-participant", string(jsonData))
 
