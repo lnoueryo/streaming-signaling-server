@@ -21,6 +21,12 @@ type Participant struct {
 	PC *webrtc.PeerConnection
 }
 
+type TrackParticipant struct{
+    UserInfo
+    StreamID string `json:"streamId"`
+    TrackID  string `json:"trackId"`
+}
+
 type Room struct {
 	ID           string
 	listLock     sync.Mutex
@@ -28,7 +34,28 @@ type Room struct {
 	participants  map[string]*Participant
 	trackLocals   map[string]*webrtc.TrackLocalStaticRTP
 	trackRemotes  map[string]*webrtc.TrackRemote
+    trackParticipants map[string]*TrackParticipant
 	cancelFunc    context.CancelFunc
+}
+
+func (r *Room) BroadcastLobby(event string, data string) {
+    for _, conn := range r.wsConnections {
+        conn.Send(event, data)
+    }
+}
+
+func (r *Room) BroadcastParticipants(event string, data string) {
+    for _, participant := range r.participants {
+        participant.WS.Send(event, data)
+    }
+}
+
+func (r *Room) GetSliceParticipants() []*UserInfo {
+    participants := make([]*UserInfo, 0)
+    for _, participant := range r.participants {
+        participants = append(participants, &participant.UserInfo)
+    }
+    return participants
 }
 
 type Rooms struct {
@@ -58,6 +85,7 @@ func (r *Rooms) getOrCreate(id string) *Room {
         participants:  make(map[string]*Participant),
         trackLocals:   make(map[string]*webrtc.TrackLocalStaticRTP),
         trackRemotes:  make(map[string]*webrtc.TrackRemote),
+        trackParticipants: make(map[string]*TrackParticipant),
     }
     r.item[id] = room
 
@@ -215,7 +243,8 @@ func (r *Rooms) cleanupEmptyRoom(id string) {
 	if len(room.wsConnections) == 0 &&
 		len(room.participants) == 0 &&
 		len(room.trackLocals) == 0 &&
-		len(room.trackRemotes) == 0 {
+		len(room.trackRemotes) == 0 &&
+		len(room.trackParticipants) == 0 {
 
 		room.cancelFunc()
 		r.deleteRoom(id)
