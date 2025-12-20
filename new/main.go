@@ -23,6 +23,9 @@ func main() {
 			"message": "Hello World",
 		})
 	})
+	r.GET("/test", func(c *gin.Context) {
+		c.JSON(200, GetSpaceMember())
+	})
 	wsAuth := r.Group("/ws")
 	wsAuth.Use(FirebaseWebsocketAuth())
 	wsAuth.GET("/live/:roomId", websocketHandler)

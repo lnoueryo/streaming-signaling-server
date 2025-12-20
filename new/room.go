@@ -16,6 +16,8 @@ import (
 )
 
 type Participant struct {
+    MemberID int64 `json:"memberId"`
+    Role string `json:"role"`
 	UserInfo
 	WS *ThreadSafeWriter
 	PC *webrtc.PeerConnection

@@ -7,6 +7,7 @@ import (
 )
 
 type ThreadSafeWriter struct {
+	UserID string
 	*websocket.Conn
 	sync.Mutex
 }
@@ -16,9 +17,6 @@ type WebsocketMessage struct {
 	Data  string `json:"data"`
 }
 
-func NewThreadSafeWriter(unsafeConn *websocket.Conn) *ThreadSafeWriter {
-	return &ThreadSafeWriter{unsafeConn, sync.Mutex{}}
-}
 
 
 func (t *ThreadSafeWriter) Send(event string, data string) error {

@@ -24,7 +24,7 @@ func websocketHandler(c *gin.Context) {
         return
     }
 
-    ws := &ThreadSafeWriter{unsafeConn, sync.Mutex{}}
+    ws := &ThreadSafeWriter{UserID: user.ID, Conn: unsafeConn, Mutex: sync.Mutex{}}
 
     // --- register WS ---
     room.listLock.Lock()
@@ -94,8 +94,11 @@ func websocketHandler(c *gin.Context) {
             }
 
             // ----- register participant -----
+            spaceMember := GetSpaceMember()
             room.listLock.Lock()
             room.participants[user.ID] = &Participant{
+                spaceMember.GetId(),
+                spaceMember.GetRole(),
                 user,
                 ws,
                 peerConnection,

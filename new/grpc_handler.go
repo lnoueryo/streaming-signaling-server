@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/pion/webrtc/v4"
 	"github.com/sirupsen/logrus"
@@ -95,4 +96,51 @@ func (s *RoomService) RemoveParticipant(
 		Id:           room.ID,
 		Participants: responseParticipants,
 	}, nil
+}
+
+func (s *RoomService) RequestEntry(
+	ctx context.Context,
+	req *signaling.RequestEntryRequest,
+) (*signaling.RequestEntryResponse, error) {
+	room, ok := rooms.getRoom(req.SpaceId)
+	if !ok {
+		md := metadata.Pairs(
+			"error-code", "room-not-found",
+		)
+		grpc.SetTrailer(ctx, md)
+		return nil, status.Error(codes.NotFound, "roomが存在しません")
+	}
+
+	for _, p := range room.participants {
+		if p.Role == "owner" {
+			res, _ := json.Marshal(req.SpaceMember)
+			p.WS.Send("participant-request", string(res))
+		}
+	}
+
+	return &signaling.RequestEntryResponse{}, nil
+}
+
+func (s *RoomService) DecideRequest(
+	ctx context.Context,
+	req *signaling.DecideRequestRequest,
+) (*signaling.DecideRequestResponse, error) {
+	room, ok := rooms.getRoom(req.SpaceId)
+	if !ok {
+		md := metadata.Pairs(
+			"error-code", "room-not-found",
+		)
+		grpc.SetTrailer(ctx, md)
+		return nil, status.Error(codes.NotFound, "roomが存在しません")
+	}
+
+	for _, c := range room.wsConnections {
+		if c.UserID == req.UserId {
+			res, _ := json.Marshal(req)
+			c.Send("request-decision", string(res))
+			break
+		}
+	}
+
+	return &signaling.DecideRequestResponse{}, nil
 }
