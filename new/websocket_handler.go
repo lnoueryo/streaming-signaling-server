@@ -96,6 +96,13 @@ func websocketHandler(c *gin.Context) {
             // ----- register participant -----
             spaceMember := GetSpaceMember()
             room.listLock.Lock()
+            _, ok := room.participants[user.ID]; if ok {
+                ws.WriteJSON(&WebsocketMessage{
+                    Event: "duplicate-participant",
+                })
+                room.listLock.Unlock()
+                return
+            }
             room.participants[user.ID] = &Participant{
                 spaceMember.GetId(),
                 spaceMember.GetRole(),

@@ -138,7 +138,6 @@ func (s *RoomService) DecideRequest(
 		if c.UserID == req.UserId {
 			res, _ := json.Marshal(req)
 			c.Send("request-decision", string(res))
-			break
 		}
 	}
 
