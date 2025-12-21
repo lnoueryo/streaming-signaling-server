@@ -19,14 +19,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SpaceService_GetSpaceMember_FullMethodName = "/application.SpaceService/GetSpaceMember"
+	SpaceService_GetTargetSpaceMember_FullMethodName = "/application.SpaceService/GetTargetSpaceMember"
 )
 
 // SpaceServiceClient is the client API for SpaceService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type SpaceServiceClient interface {
-	GetSpaceMember(ctx context.Context, in *GetSpaceMemberRequest, opts ...grpc.CallOption) (*GetSpaceMemberResponse, error)
+	GetTargetSpaceMember(ctx context.Context, in *GetTargetSpaceMemberRequest, opts ...grpc.CallOption) (*GetTargetSpaceMemberResponse, error)
 }
 
 type spaceServiceClient struct {
@@ -37,10 +37,10 @@ func NewSpaceServiceClient(cc grpc.ClientConnInterface) SpaceServiceClient {
 	return &spaceServiceClient{cc}
 }
 
-func (c *spaceServiceClient) GetSpaceMember(ctx context.Context, in *GetSpaceMemberRequest, opts ...grpc.CallOption) (*GetSpaceMemberResponse, error) {
+func (c *spaceServiceClient) GetTargetSpaceMember(ctx context.Context, in *GetTargetSpaceMemberRequest, opts ...grpc.CallOption) (*GetTargetSpaceMemberResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetSpaceMemberResponse)
-	err := c.cc.Invoke(ctx, SpaceService_GetSpaceMember_FullMethodName, in, out, cOpts...)
+	out := new(GetTargetSpaceMemberResponse)
+	err := c.cc.Invoke(ctx, SpaceService_GetTargetSpaceMember_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func (c *spaceServiceClient) GetSpaceMember(ctx context.Context, in *GetSpaceMem
 // All implementations must embed UnimplementedSpaceServiceServer
 // for forward compatibility.
 type SpaceServiceServer interface {
-	GetSpaceMember(context.Context, *GetSpaceMemberRequest) (*GetSpaceMemberResponse, error)
+	GetTargetSpaceMember(context.Context, *GetTargetSpaceMemberRequest) (*GetTargetSpaceMemberResponse, error)
 	mustEmbedUnimplementedSpaceServiceServer()
 }
 
@@ -62,8 +62,8 @@ type SpaceServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedSpaceServiceServer struct{}
 
-func (UnimplementedSpaceServiceServer) GetSpaceMember(context.Context, *GetSpaceMemberRequest) (*GetSpaceMemberResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetSpaceMember not implemented")
+func (UnimplementedSpaceServiceServer) GetTargetSpaceMember(context.Context, *GetTargetSpaceMemberRequest) (*GetTargetSpaceMemberResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetTargetSpaceMember not implemented")
 }
 func (UnimplementedSpaceServiceServer) mustEmbedUnimplementedSpaceServiceServer() {}
 func (UnimplementedSpaceServiceServer) testEmbeddedByValue()                      {}
@@ -86,20 +86,20 @@ func RegisterSpaceServiceServer(s grpc.ServiceRegistrar, srv SpaceServiceServer)
 	s.RegisterService(&SpaceService_ServiceDesc, srv)
 }
 
-func _SpaceService_GetSpaceMember_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetSpaceMemberRequest)
+func _SpaceService_GetTargetSpaceMember_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTargetSpaceMemberRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(SpaceServiceServer).GetSpaceMember(ctx, in)
+		return srv.(SpaceServiceServer).GetTargetSpaceMember(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: SpaceService_GetSpaceMember_FullMethodName,
+		FullMethod: SpaceService_GetTargetSpaceMember_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SpaceServiceServer).GetSpaceMember(ctx, req.(*GetSpaceMemberRequest))
+		return srv.(SpaceServiceServer).GetTargetSpaceMember(ctx, req.(*GetTargetSpaceMemberRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -112,8 +112,8 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*SpaceServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "GetSpaceMember",
-			Handler:    _SpaceService_GetSpaceMember_Handler,
+			MethodName: "GetTargetSpaceMember",
+			Handler:    _SpaceService_GetTargetSpaceMember_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
