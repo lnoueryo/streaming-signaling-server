@@ -1,11 +1,15 @@
 package main
 
 import (
+	"net"
 	"net/http"
 	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
+	"streaming-signaling.jounetsism.biz/proto"
 )
 
 func main() {
@@ -19,16 +23,33 @@ func main() {
 			"message": "Hello World",
 		})
 	})
+	r.GET("/test", func(c *gin.Context) {
+		c.JSON(200, GetSpaceMember())
+	})
 	wsAuth := r.Group("/ws")
 	wsAuth.Use(FirebaseWebsocketAuth())
 	wsAuth.GET("/live/:roomId", websocketHandler)
 	// wsAuth.GET("/live/:roomId/viewer", websocketViewerHandler)
 
 	httpAuth := r.Group("/")
-	httpAuth.Use(FirebaseHttpAuth())
+	httpAuth.Use(AuthHttpInterceptor())
 	httpAuth.GET("/room/:roomId/user", getRoom)
 	httpAuth.GET("/room/:roomId/user/delete", removeParticipant)
-	r.Run(":8080")
+	go r.Run(":8080")
+	lis, _ := net.Listen("tcp", ":50051")
+
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(AuthGrpcInterceptor),)
+
+	signaling.RegisterRoomServiceServer(
+		grpcServer,
+		&RoomService{},
+	)
+	logrus.Info("gRPC server started on :50051")
+	err := grpcServer.Serve(lis)
+	if err != nil {
+		logrus.Fatalf("failed to serve: %v", err)
+	}
+
 }
 
 var upgrader = websocket.Upgrader{

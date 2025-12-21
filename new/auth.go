@@ -2,14 +2,21 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/auth"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/api/option"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 type UserInfo struct {
@@ -80,74 +87,76 @@ func FirebaseWebsocketAuth() gin.HandlerFunc {
     }
 }
 
-func FirebaseHttpAuth() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// 1) Cookie（session）を優先して検証
-		if sessionCookie, err := c.Cookie("session"); err == nil && sessionCookie != "" {
-			token, err := VerifySessionCookieAndCheckRevoked(sessionCookie)
-			if err == nil {
-				email, _ := token.Claims["email"].(string)
-				name, _ := token.Claims["name"].(string)
-                image, _ := token.Claims["picture"].(string)
-				c.Set("user", UserInfo{
-					ID:    token.UID,
-					Email: email,
-					Name:  name,
-                    Image: image,
-				})
-				c.Next()
-				return
-			}
-			// Cookieが壊れていても、ここではフォールバックを許可する（すぐに401にしない）
-			// ログを出したい場合はここで warn を記録
-		}
+func AuthHttpInterceptor() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        authHeader := c.GetHeader("Authorization")
+        if authHeader == "" {
+            c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authorization missing"})
+            return
+        }
 
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-            err := &ErrorResponse{
-                "トークンがありません",
-                http.StatusUnauthorized,
-                "no-token",
-            }
-            err.response(c)
-			return
-		}
+        tokenString := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer"))
 
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || parts[0] != "Bearer" {
-            err := &ErrorResponse{
-                "無効のトークンです",
-                http.StatusUnauthorized,
-                "invalid-token",
-            }
-            err.response(c)
-			return
-		}
+        log.Info("Verifying token:", tokenString)
+        claims, err := verifyServiceJWT(tokenString)
+        if err != nil {
+            log.Error("JWT verify failed:", err)
+            c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token: " + err.Error()})
+            return
+        }
 
-		idToken := parts[1]
+        c.Set("serviceClaims", claims)
+        c.Next()
+    }
+}
 
-		token, err := VerifyIDToken(idToken)
-		if err != nil {
-            err := &ErrorResponse{
-                "無効または期限切れのトークンです",
-                http.StatusUnauthorized,
-                "invalid-token",
-            }
-            err.response(c)
-			return
-		}
 
-		email, _ := token.Claims["email"].(string)
-		name, _ := token.Claims["name"].(string)
-        image, _ := token.Claims["image"].(string)
+func AuthGrpcInterceptor(
+    ctx context.Context,
+    req interface{},
+    info *grpc.UnaryServerInfo,
+    handler grpc.UnaryHandler,
+) (interface{}, error) {
 
-        c.Set("user", UserInfo{
-            ID:   token.UID,
-            Email: email,
-            Name:  name,
-            Image: image,
-        })
+    md, ok := metadata.FromIncomingContext(ctx)
+    if !ok {
+        return nil, status.Error(codes.Unauthenticated, "metadata missing")
+    }
 
-		c.Next()
-	}
+    auth := md.Get("authorization")
+    if len(auth) == 0 {
+        return nil, status.Error(codes.Unauthenticated, "authorization missing")
+    }
+
+    token := strings.TrimPrefix(auth[0], "Bearer ")
+
+    claims, err := verifyServiceJWT(token)
+    if err != nil {
+        return nil, status.Error(codes.Unauthenticated, "invalid token")
+    }
+
+    ctx = context.WithValue(ctx, "serviceClaims", claims)
+    return handler(ctx, req)
+}
+
+func verifyServiceJWT(tokenString string) (*jwt.RegisteredClaims, error) {
+    secret := []byte(os.Getenv("SERVICE_JWT_SECRET"))
+    token, err := jwt.ParseWithClaims(
+        tokenString,
+        &jwt.RegisteredClaims{},
+        func(token *jwt.Token) (interface{}, error) {
+            return secret, nil
+        },
+        jwt.WithAudience("signaling-server"),
+        jwt.WithIssuer("app-server"),
+    )
+    if err != nil {
+        return nil, fmt.Errorf("parse error: %w", err)
+    }
+
+    claims, ok := token.Claims.(*jwt.RegisteredClaims)
+    if !ok || !token.Valid {
+        return nil, fmt.Errorf("invalid claims or token")
+    }
+    return claims, nil
 }
