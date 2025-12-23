@@ -4,11 +4,11 @@
 
 # Go のビルドコマンド
 [build]
-cmd = "go build -o ./tmp/app ./..."
+cmd = "go build -o ./tmp/app ."
 bin = "tmp/app"
 full_bin = ""
 include_ext = ["go"]
-exclude_dir = ["vendor", "tmp"]
+exclude_dir = ["vendor", "tmp", "proto"]
 delay = 200 # 200ms debounce
 
 # 変更監視
