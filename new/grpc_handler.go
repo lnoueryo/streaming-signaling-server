@@ -100,8 +100,8 @@ func (s *RoomService) RemoveParticipant(
 
 func (s *RoomService) RequestEntry(
 	ctx context.Context,
-	req *signaling.RequestEntryRequest,
-) (*signaling.RequestEntryResponse, error) {
+	req *signaling.SpaceMemberRequest,
+) (*signaling.Void, error) {
 	room, ok := rooms.getRoom(req.SpaceId)
 	if !ok {
 		md := metadata.Pairs(
@@ -118,13 +118,13 @@ func (s *RoomService) RequestEntry(
 		}
 	}
 
-	return &signaling.RequestEntryResponse{}, nil
+	return &signaling.Void{}, nil
 }
 
 func (s *RoomService) DecideRequest(
 	ctx context.Context,
-	req *signaling.DecideRequestRequest,
-) (*signaling.DecideRequestResponse, error) {
+	req *signaling.SpaceMember,
+) (*signaling.Void, error) {
 	room, ok := rooms.getRoom(req.SpaceId)
 	if !ok {
 		md := metadata.Pairs(
@@ -141,5 +141,30 @@ func (s *RoomService) DecideRequest(
 		}
 	}
 
-	return &signaling.DecideRequestResponse{}, nil
+	return &signaling.Void{}, nil
+}
+
+func (s *RoomService) AcceptInvitation(
+	ctx context.Context,
+	req *signaling.SpaceMemberRequest,
+) (*signaling.Void, error) {
+	logrus.Info("AcceptInvitation: checking participant role: %s", req.SpaceMember.Role)
+	room, ok := rooms.getRoom(req.SpaceId)
+	if !ok {
+		md := metadata.Pairs(
+			"error-code", "room-not-found",
+		)
+		grpc.SetTrailer(ctx, md)
+		return nil, status.Error(codes.NotFound, "roomが存在しません")
+	}
+
+	for _, p := range room.participants {
+		logrus.Info("AcceptInvitation: checking participant role: %s", p.Role)
+		if p.Role == "owner" {
+			res, _ := json.Marshal(req.SpaceMember)
+			p.WS.Send("accept-invitation", string(res))
+		}
+	}
+
+	return &signaling.Void{}, nil
 }

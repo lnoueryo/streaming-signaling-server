@@ -23,6 +23,7 @@ const (
 	RoomService_RemoveParticipant_FullMethodName = "/signaling.RoomService/RemoveParticipant"
 	RoomService_RequestEntry_FullMethodName      = "/signaling.RoomService/RequestEntry"
 	RoomService_DecideRequest_FullMethodName     = "/signaling.RoomService/DecideRequest"
+	RoomService_AcceptInvitation_FullMethodName  = "/signaling.RoomService/AcceptInvitation"
 )
 
 // RoomServiceClient is the client API for RoomService service.
@@ -31,8 +32,9 @@ const (
 type RoomServiceClient interface {
 	GetRoom(ctx context.Context, in *GetRoomRequest, opts ...grpc.CallOption) (*GetRoomResponse, error)
 	RemoveParticipant(ctx context.Context, in *RemoveParticipantRequest, opts ...grpc.CallOption) (*GetRoomResponse, error)
-	RequestEntry(ctx context.Context, in *RequestEntryRequest, opts ...grpc.CallOption) (*RequestEntryResponse, error)
-	DecideRequest(ctx context.Context, in *DecideRequestRequest, opts ...grpc.CallOption) (*DecideRequestResponse, error)
+	RequestEntry(ctx context.Context, in *SpaceMemberRequest, opts ...grpc.CallOption) (*Void, error)
+	DecideRequest(ctx context.Context, in *SpaceMember, opts ...grpc.CallOption) (*Void, error)
+	AcceptInvitation(ctx context.Context, in *SpaceMemberRequest, opts ...grpc.CallOption) (*Void, error)
 }
 
 type roomServiceClient struct {
@@ -63,9 +65,9 @@ func (c *roomServiceClient) RemoveParticipant(ctx context.Context, in *RemovePar
 	return out, nil
 }
 
-func (c *roomServiceClient) RequestEntry(ctx context.Context, in *RequestEntryRequest, opts ...grpc.CallOption) (*RequestEntryResponse, error) {
+func (c *roomServiceClient) RequestEntry(ctx context.Context, in *SpaceMemberRequest, opts ...grpc.CallOption) (*Void, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(RequestEntryResponse)
+	out := new(Void)
 	err := c.cc.Invoke(ctx, RoomService_RequestEntry_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -73,10 +75,20 @@ func (c *roomServiceClient) RequestEntry(ctx context.Context, in *RequestEntryRe
 	return out, nil
 }
 
-func (c *roomServiceClient) DecideRequest(ctx context.Context, in *DecideRequestRequest, opts ...grpc.CallOption) (*DecideRequestResponse, error) {
+func (c *roomServiceClient) DecideRequest(ctx context.Context, in *SpaceMember, opts ...grpc.CallOption) (*Void, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(DecideRequestResponse)
+	out := new(Void)
 	err := c.cc.Invoke(ctx, RoomService_DecideRequest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *roomServiceClient) AcceptInvitation(ctx context.Context, in *SpaceMemberRequest, opts ...grpc.CallOption) (*Void, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Void)
+	err := c.cc.Invoke(ctx, RoomService_AcceptInvitation_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -89,8 +101,9 @@ func (c *roomServiceClient) DecideRequest(ctx context.Context, in *DecideRequest
 type RoomServiceServer interface {
 	GetRoom(context.Context, *GetRoomRequest) (*GetRoomResponse, error)
 	RemoveParticipant(context.Context, *RemoveParticipantRequest) (*GetRoomResponse, error)
-	RequestEntry(context.Context, *RequestEntryRequest) (*RequestEntryResponse, error)
-	DecideRequest(context.Context, *DecideRequestRequest) (*DecideRequestResponse, error)
+	RequestEntry(context.Context, *SpaceMemberRequest) (*Void, error)
+	DecideRequest(context.Context, *SpaceMember) (*Void, error)
+	AcceptInvitation(context.Context, *SpaceMemberRequest) (*Void, error)
 	mustEmbedUnimplementedRoomServiceServer()
 }
 
@@ -107,11 +120,14 @@ func (UnimplementedRoomServiceServer) GetRoom(context.Context, *GetRoomRequest) 
 func (UnimplementedRoomServiceServer) RemoveParticipant(context.Context, *RemoveParticipantRequest) (*GetRoomResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveParticipant not implemented")
 }
-func (UnimplementedRoomServiceServer) RequestEntry(context.Context, *RequestEntryRequest) (*RequestEntryResponse, error) {
+func (UnimplementedRoomServiceServer) RequestEntry(context.Context, *SpaceMemberRequest) (*Void, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RequestEntry not implemented")
 }
-func (UnimplementedRoomServiceServer) DecideRequest(context.Context, *DecideRequestRequest) (*DecideRequestResponse, error) {
+func (UnimplementedRoomServiceServer) DecideRequest(context.Context, *SpaceMember) (*Void, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DecideRequest not implemented")
+}
+func (UnimplementedRoomServiceServer) AcceptInvitation(context.Context, *SpaceMemberRequest) (*Void, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AcceptInvitation not implemented")
 }
 func (UnimplementedRoomServiceServer) mustEmbedUnimplementedRoomServiceServer() {}
 func (UnimplementedRoomServiceServer) testEmbeddedByValue()                     {}
@@ -171,7 +187,7 @@ func _RoomService_RemoveParticipant_Handler(srv interface{}, ctx context.Context
 }
 
 func _RoomService_RequestEntry_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RequestEntryRequest)
+	in := new(SpaceMemberRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -183,13 +199,13 @@ func _RoomService_RequestEntry_Handler(srv interface{}, ctx context.Context, dec
 		FullMethod: RoomService_RequestEntry_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RoomServiceServer).RequestEntry(ctx, req.(*RequestEntryRequest))
+		return srv.(RoomServiceServer).RequestEntry(ctx, req.(*SpaceMemberRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _RoomService_DecideRequest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DecideRequestRequest)
+	in := new(SpaceMember)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -201,7 +217,25 @@ func _RoomService_DecideRequest_Handler(srv interface{}, ctx context.Context, de
 		FullMethod: RoomService_DecideRequest_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RoomServiceServer).DecideRequest(ctx, req.(*DecideRequestRequest))
+		return srv.(RoomServiceServer).DecideRequest(ctx, req.(*SpaceMember))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RoomService_AcceptInvitation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SpaceMemberRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoomServiceServer).AcceptInvitation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RoomService_AcceptInvitation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoomServiceServer).AcceptInvitation(ctx, req.(*SpaceMemberRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -228,6 +262,10 @@ var RoomService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DecideRequest",
 			Handler:    _RoomService_DecideRequest_Handler,
+		},
+		{
+			MethodName: "AcceptInvitation",
+			Handler:    _RoomService_AcceptInvitation_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
