@@ -9,7 +9,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	"streaming-signaling.jounetsism.biz/proto"
+	signaling "streaming-signaling.jounetsism.biz/proto/signaling"
 )
 
 func main() {

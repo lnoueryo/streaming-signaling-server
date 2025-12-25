@@ -3,10 +3,8 @@ package main
 import (
 	"encoding/json"
 	"sync"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 	log "github.com/sirupsen/logrus"
 )
@@ -68,180 +66,21 @@ func websocketHandler(c *gin.Context) {
         }
 
         switch msg.Event {
-
-        // =====================================================
-        //                      OFFER
-        // =====================================================
         case "offer":
-            peerConnection, err = webrtc.NewPeerConnection(webrtc.Configuration{})
-            if err != nil {
-                log.Errorf("pc create error: %v", err)
+            if err := CreatePeer(roomId, user); err != nil {
+                log.Errorf("create peer error: %v", err)
                 return
             }
-
-            // Recvonly transceivers
-            for _, typ := range []webrtc.RTPCodecType{
-                webrtc.RTPCodecTypeVideo,
-                webrtc.RTPCodecTypeAudio,
-            } {
-                if _, err := peerConnection.AddTransceiverFromKind(
-                    typ,
-                    webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionRecvonly},
-                ); err != nil {
-                    log.Errorf("add transceiver error: %v", err)
-                    return
-                }
-            }
-
-            // ----- register participant -----
-            spaceMember, err := GetTargetSpaceMember(roomId, user.ID); if err != nil {
-                log.Errorf("space member error: %v", err)
-                return
-            }
-            room.listLock.Lock()
-            _, ok := room.participants[user.ID]; if ok {
-                ws.WriteJSON(&WebsocketMessage{
-                    Event: "duplicate-participant",
-                })
-                room.listLock.Unlock()
-                return
-            }
-            room.participants[user.ID] = &Participant{
-                spaceMember.GetId(),
-                spaceMember.GetRole(),
-                user,
-                ws,
-                peerConnection,
-            }
-            room.listLock.Unlock()
-
-			peerConnection.OnConnectionStateChange(func(p webrtc.PeerConnectionState) {
-				log.Info("Connection state change: %s", p)
-
-				switch p {
-				case webrtc.PeerConnectionStateConnected:
-					room, ok := rooms.getRoom(roomId);if !ok {
-						return
-					}
-					participants := make([]UserInfo, 0)
-					for _, participant := range room.participants {
-						participants = append(participants, UserInfo{
-							ID: participant.ID,
-							Name: participant.Name,
-							Email: participant.Email,
-							Image: participant.Image,
-						})
-					}
-					res, _ := json.Marshal(participants)
-                    room.BroadcastLobby("access", string(res))
-
-				case webrtc.PeerConnectionStateFailed:
-					_ = peerConnection.Close()
-				case webrtc.PeerConnectionStateDisconnected:
-					// 猶予を与える
-					go func() {
-						time.Sleep(20 * time.Second)
-						if peerConnection.ConnectionState() == webrtc.PeerConnectionStateDisconnected {
-							_ = peerConnection.Close()
-						}
-					}()
-				case webrtc.PeerConnectionStateClosed:
-					room, ok := rooms.getRoom(roomId);if !ok {
-						return
-					}
-					room.listLock.Lock()
-					delete(room.participants, user.ID)
-					room.listLock.Unlock()
-					users := make([]UserInfo, 0)
-					for _, participant := range room.participants {
-						users = append(users, UserInfo{
-							ID: participant.ID,
-							Name: participant.Name,
-							Email: participant.Email,
-							Image: participant.Image,
-						})
-					}
-					res, _ := json.Marshal(users)
-					for _, conn := range room.wsConnections {
-						conn.Send("access", string(res))
-					}
-				}
-			})
-
-            // ----- track handler -----
-            peerConnection.OnTrack(func(t *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
-                log.Infof("Got remote track: %s %s %s %s %s", t.Kind(), t.ID(), t.StreamID(), t.Msid(), t.RID())
-                trackLocal := addTrack(room, t)
-                if trackLocal == nil {
-                    return
-                }
-                track := &TrackParticipant{
-                    user,
-                    t.StreamID(),
-                    t.ID(),
-                }
-                room.trackParticipants[t.StreamID()] = track
-                jsonData, _ := json.Marshal(room.trackParticipants)
-                defer func() {
-                    removeTrack(room, trackLocal)
-                    delete(room.trackParticipants, t.StreamID())
-                }()
-                room.BroadcastParticipants("track-participant", string(jsonData))
-
-                buf := make([]byte, 1500)
-                pkt := &rtp.Packet{}
-
-                for {
-                    n, _, err := t.Read(buf)
-                    if err != nil {
-                        return
-                    }
-
-                    if pkt.Unmarshal(buf[:n]) != nil {
-                        continue
-                    }
-
-                    pkt.Extension = false
-                    pkt.Extensions = nil
-                    trackLocal.WriteRTP(pkt)
-                }
-            })
-
-            // ----- set remote offer -----
-            var offer webrtc.SessionDescription
-            json.Unmarshal([]byte(msg.Data), &offer)
-            peerConnection.SetRemoteDescription(offer)
-
-            // ----- create answer -----
-            answer, _ := peerConnection.CreateAnswer(nil)
-            peerConnection.SetLocalDescription(answer)
-
-            res, _ := json.Marshal(answer)
-            ws.WriteJSON(&WebsocketMessage{
-                Event: "answer",
-                Data:  string(res),
-            })
-
-            // renegotiate others
-            signalPeerConnections(room)
-
-        // =====================================================
-        //                  CANDIDATE
-        // =====================================================
         case "candidate":
-            var cand webrtc.ICECandidateInit
-            json.Unmarshal([]byte(msg.Data), &cand)
-            if err := peerConnection.AddICECandidate(cand); err != nil {
-                log.Errorf("ice add error: %v", err)
+            if err := AddCandidate(roomId, user, msg.Data); err != nil {
+                log.Errorf("add candidate error: %v", err)
+                return
             }
-
-        // =====================================================
-        //                    ANSWER
-        // =====================================================
         case "answer":
-            var ans webrtc.SessionDescription
-            json.Unmarshal([]byte(msg.Data), &ans)
-            peerConnection.SetRemoteDescription(ans)
+            if err := SetAnswer(roomId, user, msg.Data); err != nil {
+                log.Errorf("set answer error: %v", err)
+                return
+            }
         }
     }
 }

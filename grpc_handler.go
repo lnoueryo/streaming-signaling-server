@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"streaming-signaling.jounetsism.biz/proto"
+	signaling "streaming-signaling.jounetsism.biz/proto/signaling"
 )
 
 type RoomService struct {
@@ -165,4 +165,52 @@ func (s *RoomService) AcceptInvitation(
 	}
 
 	return &signaling.Void{}, nil
+}
+
+func (s *RoomService) BroadcastToLobby(
+    ctx context.Context,
+    req *signaling.BroadcastRequest,
+) (*signaling.Void, error) {
+	room, ok := rooms.getRoom(req.SpaceId);if !ok {
+		return nil, status.Error(codes.NotFound, "room not found")
+	}
+
+	for _, c := range room.wsConnections {
+		c.Send(req.Event, string(req.Data))
+	}
+
+	return &signaling.Void{}, nil
+}
+
+func (s *RoomService) BroadcastToRoom(
+	ctx context.Context,
+	req *signaling.BroadcastRequest,
+) (*signaling.Void, error) {
+	room, ok := rooms.getRoom(req.SpaceId);if !ok {
+		return nil, status.Error(codes.NotFound, "room not found")
+	}
+
+	for _, p := range room.wsConnections {
+		p.Send(req.Event, string(req.Data))
+	}
+
+	return &signaling.Void{}, nil
+}
+
+func (s *RoomService) Unicast(
+	ctx context.Context,
+	req *signaling.UnicastRequest,
+) (*signaling.Void, error) {
+	logrus.Error("Unicast %s to %s", req.Event, req.GetUserId())
+	room, ok := rooms.getRoom(req.SpaceId);if !ok {
+		return nil, status.Error(codes.NotFound, "room not found")
+	}
+
+	for _, p := range room.wsConnections {
+		logrus.Errorf("%s %s", p.UserID, req.GetUserId())
+		if p.UserID == req.GetUserId() {
+			p.Send(req.Event, string(req.Data))
+		}
+	}
+    return &signaling.Void{}, nil
 }

@@ -3,52 +3,130 @@ package main
 import (
 	"context"
 	"log"
+	"os"
+	"sync"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 
-	pb "streaming-signaling.jounetsism.biz/proto"
+	media "streaming-signaling.jounetsism.biz/proto/media"
+)
+var (
+    mediaServiceClient media.MediaServiceClient
+    grpcConn           *grpc.ClientConn
+    onceInitRoom           sync.Once
 )
 
-func GetTargetSpaceMember(roomId string, userId string) (*pb.GetTargetSpaceMemberResponse, error) {
-	// ① gRPC サーバーへ接続
-	conn, err := grpc.NewClient(
-		"dns:///streaming-backend:50051",                     // 推奨は DNS スキーマ付き
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		log.Fatalf("failed to create client: %v", err)
-	}
-	defer conn.Close()
+func initRoomClient() {
+    conn, err := grpc.Dial(
+        "dns:///streaming-media:50051",
+        grpc.WithTransportCredentials(insecure.NewCredentials()),
+    )
+    if err != nil {
+        log.Fatalf("failed to dial media server: %v", err)
+    }
+    mediaServiceClient = media.NewMediaServiceClient(conn)
+}
 
-    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func CreatePeer(spaceId string, user UserInfo) error {
+    onceInitRoom.Do(initRoomClient)
+    token := createServiceJWT()
+    md := metadata.New(map[string]string{
+        "authorization": "Bearer " + token,
+    })
+    ctx := metadata.NewOutgoingContext(context.Background(), md)
+    ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
     defer cancel()
 
-	client := pb.NewSpaceServiceClient(conn)
+    _, err := mediaServiceClient.CreatePeer(ctx, &media.CreatePeerRequest{
+        SpaceId: spaceId,
+        User: &media.User{
+            Id:    user.ID,
+            Email: user.Email,
+            Name:  user.Name,
+            Image: user.Image,
+        },
+    })
+    if err != nil {
+        return err
+    }
+    return nil
+}
 
-	// 実際のリクエスト
-	resp, err := client.GetTargetSpaceMember(
-		ctx,
-		&pb.GetTargetSpaceMemberRequest{
-			SpaceId: roomId,
-			UserId:  userId,
+func AddCandidate(spaceId string, user UserInfo, candidate string) error {
+    onceInitRoom.Do(initRoomClient)
+    token := createServiceJWT()
+    md := metadata.New(map[string]string{
+        "authorization": "Bearer " + token,
+    })
+    ctx := metadata.NewOutgoingContext(context.Background(), md)
+    ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+    defer cancel()
+
+    _, err := mediaServiceClient.AddCandidate(ctx, &media.AddCandidateRequest{
+        SpaceId: spaceId,
+        User: &media.User{
+			Id:    user.ID,
+			Email: user.Email,
+			Name:  user.Name,
+			Image: user.Image,
 		},
-	)
-	if err != nil {
-		log.Fatalf("GetTargetSpaceMember failed: %v", err)
-		return nil, err
+		Candidate: candidate,
+    })
+    if err != nil {
+        return err
+    }
+
+    return nil
+}
+
+func SetAnswer(spaceId string, user UserInfo, answer string) error {
+    onceInitRoom.Do(initRoomClient)
+    token := createServiceJWT()
+    md := metadata.New(map[string]string{
+        "authorization": "Bearer " + token,
+    })
+    ctx := metadata.NewOutgoingContext(context.Background(), md)
+    ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+    defer cancel()
+
+    _, err := mediaServiceClient.SetAnswer(ctx, &media.SetAnswerRequest{
+        SpaceId: spaceId,
+        User: &media.User{
+			Id:    user.ID,
+			Email: user.Email,
+			Name:  user.Name,
+			Image: user.Image,
+		},
+		Answer: answer,
+    })
+    if err != nil {
+        return err
+    }
+
+    return nil
+}
+
+func createServiceJWT() string {
+	secret := []byte(os.Getenv("SERVICE_JWT_SECRET"))
+
+	claims := jwt.RegisteredClaims{
+		Issuer:    "app-server",
+		Audience:  []string{"signaling-server"},
+		Subject:   "media-service", // 任意（識別用）
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * time.Minute)),
 	}
 
-	// 結果を表示
-	log.Printf(
-		"SpaceMember: ID=%d, SpaceID=%s, UserID=%s, Email=%s, Role=%s",
-		resp.GetId(),
-		resp.GetSpaceId(),
-		resp.GetUserId(),
-		resp.GetEmail(),
-		resp.GetRole(),
-	)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
-	return resp, nil
+	signed, err := token.SignedString(secret)
+	if err != nil {
+		panic(err)
+	}
+
+	return signed
 }
