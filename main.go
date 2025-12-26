@@ -40,9 +40,9 @@ func main() {
 
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(AuthGrpcInterceptor),)
 
-	signaling.RegisterRoomServiceServer(
+	signaling.RegisterSignalingServiceServer(
 		grpcServer,
-		&RoomService{},
+		&SignalingService{},
 	)
 	logrus.Info("gRPC server started on :50051")
 	err := grpcServer.Serve(lis)
