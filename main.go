@@ -9,7 +9,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	"streaming-signaling.jounetsism.biz/proto"
+	signaling "streaming-signaling.jounetsism.biz/proto/signaling"
 )
 
 func main() {
@@ -23,26 +23,23 @@ func main() {
 			"message": "Hello World",
 		})
 	})
-	r.GET("/test", func(c *gin.Context) {
-		
-	})
+
 	wsAuth := r.Group("/ws")
 	wsAuth.Use(FirebaseWebsocketAuth())
 	wsAuth.GET("/live/:roomId", websocketHandler)
+	wsAuth.GET("/live/:roomId/viewer", websocketViewerHandler)
 	// wsAuth.GET("/live/:roomId/viewer", websocketViewerHandler)
 
 	httpAuth := r.Group("/")
 	httpAuth.Use(AuthHttpInterceptor())
-	httpAuth.GET("/room/:roomId/user", getRoom)
-	httpAuth.GET("/room/:roomId/user/delete", removeParticipant)
 	go r.Run(":8080")
 	lis, _ := net.Listen("tcp", ":50051")
 
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(AuthGrpcInterceptor),)
 
-	signaling.RegisterRoomServiceServer(
+	signaling.RegisterSignalingServiceServer(
 		grpcServer,
-		&RoomService{},
+		&SignalingService{},
 	)
 	logrus.Info("gRPC server started on :50051")
 	err := grpcServer.Serve(lis)

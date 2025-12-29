@@ -2,9 +2,9 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v5.29.3
-// source: application.proto
+// source: application/application.proto
 
-package signaling
+package proto
 
 import (
 	context "context"
@@ -117,5 +117,5 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "application.proto",
+	Metadata: "application/application.proto",
 }
