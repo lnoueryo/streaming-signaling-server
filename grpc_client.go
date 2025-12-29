@@ -22,7 +22,7 @@ var (
 
 func initRoomClient() {
     conn, err := grpc.Dial(
-        "dns:///streaming-media:50051",
+        mediaServerOrigin,
         grpc.WithTransportCredentials(insecure.NewCredentials()),
     )
     if err != nil {
