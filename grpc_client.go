@@ -31,6 +31,31 @@ func initRoomClient() {
     mediaServiceClient = media.NewMediaServiceClient(conn)
 }
 
+func CreatePeer(spaceId string, user UserInfo) error {
+    onceInitRoom.Do(initRoomClient)
+    token := createServiceJWT()
+    md := metadata.New(map[string]string{
+        "authorization": "Bearer " + token,
+    })
+    ctx := metadata.NewOutgoingContext(context.Background(), md)
+    ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+    defer cancel()
+
+    _, err := mediaServiceClient.CreatePeer(ctx, &media.CreatePeerRequest{
+        SpaceId: spaceId,
+        User: &media.User{
+            Id:    user.ID,
+            Email: user.Email,
+            Name:  user.Name,
+            Image: user.Image,
+        },
+    })
+    if err != nil {
+        return err
+    }
+    return nil
+}
+
 func CreateViewerPeer(spaceId string, user UserInfo) error {
     onceInitRoom.Do(initRoomClient)
     token := createServiceJWT()

@@ -58,6 +58,11 @@ func websocketHandler(c *gin.Context) {
         }
 
         switch msg.Event {
+        case "offer":
+            if err := CreatePeer(roomId, user); err != nil {
+                log.Errorf("create peer error: %v", err)
+                return
+            }
         case "candidate":
             if err := AddCandidate(roomId, user, msg.Data); err != nil {
                 log.Errorf("add candidate error: %v", err)
