@@ -10,12 +10,6 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-type TrackParticipant struct{
-    UserInfo
-    StreamID string `json:"streamId"`
-    TrackID  string `json:"trackId"`
-}
-
 type Room struct {
 	ID           string
 	listLock     sync.Mutex
