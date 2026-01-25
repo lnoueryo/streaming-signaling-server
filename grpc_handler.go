@@ -20,7 +20,7 @@ func (s *SignalingService) DecideRequest(
 	ctx context.Context,
 	req *signaling.SpaceMember,
 ) (*signaling.Void, error) {
-	room, ok := rooms.getRoom(req.SpaceId)
+	room, ok := lobbies.getLobby(req.SpaceId)
 	if !ok {
 		md := metadata.Pairs(
 			"error-code", "room-not-found",
@@ -43,7 +43,7 @@ func (s *SignalingService) BroadcastToLobby(
     ctx context.Context,
     req *signaling.BroadcastRequest,
 ) (*signaling.Void, error) {
-	room, ok := rooms.getRoom(req.SpaceId);if !ok {
+	room, ok := lobbies.getLobby(req.SpaceId);if !ok {
 		return nil, status.Error(codes.NotFound, "room not found")
 	}
 
@@ -59,7 +59,7 @@ func (s *SignalingService) Unicast(
 	req *signaling.UnicastRequest,
 ) (*signaling.Void, error) {
 	logrus.Error("Unicast %s to %s", req.Event, req.GetUserId())
-	room, ok := rooms.getRoom(req.SpaceId);if !ok {
+	room, ok := lobbies.getLobby(req.SpaceId);if !ok {
 		return nil, status.Error(codes.NotFound, "room not found")
 	}
 

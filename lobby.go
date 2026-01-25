@@ -1,7 +1,3 @@
-// ==============================
-// rooms.go
-// ==============================
-
 package main
 
 import (
@@ -16,31 +12,31 @@ type TrackParticipant struct{
     TrackID  string `json:"trackId"`
 }
 
-type Room struct {
+type Lobby struct {
 	ID           string
 	listLock     sync.Mutex
 	wsConnections map[*websocket.Conn]*ThreadSafeWriter
 }
 
-func (r *Room) BroadcastLobby(event string, data string) {
+func (r *Lobby) BroadcastLobby(event string, data string) {
     for _, conn := range r.wsConnections {
         conn.Send(event, data)
     }
 }
 
-type Rooms struct {
-	item map[string]*Room
+type Lobbies struct {
+	item map[string]*Lobby
 	lock sync.RWMutex
 }
 
-func (r *Rooms) getRoom(id string) (*Room, bool) {
+func (r *Lobbies) getLobby(id string) (*Lobby, bool) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 	room, ok := r.item[id]
 	return room, ok
 }
 
-func (r *Rooms) getOrCreate(id string) *Room {
+func (r *Lobbies) getOrCreate(id string) *Lobby {
     r.lock.Lock()
     defer r.lock.Unlock()
 
@@ -49,7 +45,7 @@ func (r *Rooms) getOrCreate(id string) *Room {
         return room
     }
 
-    room = &Room{
+    room = &Lobby{
         ID:            id,
         wsConnections: make(map[*websocket.Conn]*ThreadSafeWriter),
     }
@@ -58,14 +54,14 @@ func (r *Rooms) getOrCreate(id string) *Room {
     return room
 }
 
-func (r *Rooms) deleteRoom(id string) {
+func (r *Lobbies) deleteLobby(id string) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	delete(r.item, id)
 }
 
-func (r *Rooms) cleanupEmptyRoom(id string) {
-	room, ok := r.getRoom(id)
+func (r *Lobbies) cleanupEmptyLobby(id string) {
+	room, ok := r.getLobby(id)
 	if !ok {
 		return
 	}
@@ -74,6 +70,6 @@ func (r *Rooms) cleanupEmptyRoom(id string) {
 	defer room.listLock.Unlock()
 
 	if len(room.wsConnections) == 0 {
-		r.deleteRoom(id)
+		r.deleteLobby(id)
 	}
 }

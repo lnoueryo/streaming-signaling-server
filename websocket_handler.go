@@ -9,13 +9,17 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type RoomController struct{}
 
-func websocketHandler(c *gin.Context) {
+func NewRoomController() *RoomController {
+    return &RoomController{}
+}
+
+func (rc *RoomController)websocketHandler(c *gin.Context) {
     user := getUser(c)
     roomId := c.Param("roomId")
-    room := rooms.getOrCreate(roomId)
+    room := lobbies.getOrCreate(roomId)
 
-    // Upgrade HTTP → WebSocket
     unsafeConn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
     if err != nil {
         log.Errorf("upgrade failed: %v", err)
@@ -24,12 +28,10 @@ func websocketHandler(c *gin.Context) {
 
     ws := &ThreadSafeWriter{UserID: user.ID, Conn: unsafeConn, Mutex: sync.Mutex{}}
 
-    // --- register WS ---
     room.listLock.Lock()
     room.wsConnections[ws.Conn] = ws
     room.listLock.Unlock()
 
-    // ---- clean up ----
     defer func() {
         room.listLock.Lock()
         // 複数のデバイスでロビーに入室し、
@@ -39,7 +41,7 @@ func websocketHandler(c *gin.Context) {
         room.listLock.Unlock()
 
         ws.Close()
-        rooms.cleanupEmptyRoom(roomId)
+        lobbies.cleanupEmptyLobby(roomId)
     }()
 
     msg := &WebsocketMessage{}
@@ -77,7 +79,7 @@ func websocketHandler(c *gin.Context) {
     }
 }
 
-func websocketViewerHandler(c *gin.Context) {
+func (rc *RoomController)websocketViewerHandler(c *gin.Context) {
     user := getUser(c)
 	uid, err := uuid.NewV7()
 	if err != nil {
@@ -85,7 +87,7 @@ func websocketViewerHandler(c *gin.Context) {
 	}
     user.ID = uid.String()
     roomId := c.Param("roomId")
-    room := rooms.getOrCreate(roomId)
+    room := lobbies.getOrCreate(roomId)
 
     unsafeConn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
     if err != nil {
@@ -95,18 +97,16 @@ func websocketViewerHandler(c *gin.Context) {
 
     ws := &ThreadSafeWriter{UserID: user.ID, Conn: unsafeConn, Mutex: sync.Mutex{}}
 
-    // --- register WS ---
     room.listLock.Lock()
     room.wsConnections[ws.Conn] = ws
     room.listLock.Unlock()
 
-    // ---- clean up ----
     defer func() {
         room.listLock.Lock()
         delete(room.wsConnections, ws.Conn)
         room.listLock.Unlock()
         ws.Close()
-        rooms.cleanupEmptyRoom(roomId)
+        lobbies.cleanupEmptyLobby(roomId)
     }()
 
     msg := &WebsocketMessage{}

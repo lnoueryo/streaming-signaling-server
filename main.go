@@ -13,6 +13,7 @@ import (
 )
 
 func main() {
+	roomController := NewRoomController()
 	// Ginエンジンのインスタンスを作成
 	r := gin.Default()
 	r.Use(gin.Logger())
@@ -26,9 +27,8 @@ func main() {
 
 	wsAuth := r.Group("/ws")
 	wsAuth.Use(FirebaseWebsocketAuth())
-	wsAuth.GET("/live/:roomId", websocketHandler)
-	wsAuth.GET("/live/:roomId/viewer", websocketViewerHandler)
-	// wsAuth.GET("/live/:roomId/viewer", websocketViewerHandler)
+	wsAuth.GET("/live/:roomId", roomController.websocketHandler)
+	wsAuth.GET("/live/:roomId/viewer", roomController.websocketViewerHandler)
 
 	httpAuth := r.Group("/")
 	httpAuth.Use(AuthHttpInterceptor())
@@ -53,8 +53,8 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
-var rooms = &Rooms{
-	map[string]*Room{},
+var lobbies = &Lobbies{
+	map[string]*Lobby{},
 	sync.RWMutex{},
 }
 
